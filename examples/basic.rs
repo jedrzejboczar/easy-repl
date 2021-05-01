@@ -4,39 +4,10 @@ use std::collections::HashMap;
 use just_repl::{Shell, CommandStatus, command, args_validator, replace_expr};
 
 fn main() {
-    let mut shell = Shell {
-        description: "Example shell".into(),
-        prompt: "=> ".into(),
-        commands: HashMap::new(),
-        editor: rustyline::Editor::<()>::new(),
-    };
+    let mut outside_x = String::from("Out x");
+    let mut outside_y = String::from("Out y");
 
-    // shell.add("help", Command {
-    //     description: "Print help".into(),
-    //     handler: Box::new(|args| {
-    //         println!("This is help message");
-    //         0
-    //     }),
-    //     parser: typed_parser!(),
-    // });
-    //
-    // shell.add("hello", Command {
-    //     description: "Say hello".into(),
-    //     handler: Box::new(|args| {
-    //         println!("Hello {}!", args[0]);
-    //         0
-    //     }),
-    //     parser: typed_parser!(String),
-    // });
-    //
-    // shell.add("hello", command! {
-    //     "Say hello",
-    //     String="who" => |(who, )| {
-    //         println!("Hello {}!", who);
-    //         0
-    //     }
-    // });
-
+    let mut shell = Shell::new("=> ", "Example shell");
 
     shell.add("count", command! {
         "Count from X to Y",
@@ -57,15 +28,25 @@ fn main() {
         },
     });
 
-    let msg = shell.help();
+    shell.add("outx", command! {
+        "Use mutably outside var x",
+        => |()| {
+            outside_x += "x";
+            println!("{}", outside_x);
+            CommandStatus::Done
+        },
+    });
 
-    // shell.add("help", command! {
-    //     "Show help",
-    //     => |()| {
-    //         println!("{}", msg);
-    //         CommandStatus::Done
-    //     },
-    // });
+    shell.add("outy", just_repl::Command {
+        description: "Use mutably outside var y".into(),
+        args_info: vec![],
+        handler: Box::new(|args| {
+            outside_y += "y";
+            println!("{}", outside_y);
+            CommandStatus::Done
+        }),
+        validator: Box::new(args_validator!()),
+    });
 
     shell.run();
 }

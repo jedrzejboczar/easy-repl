@@ -2,10 +2,10 @@ use thiserror;
 use anyhow;
 
 // TODO: make these private while still exporting the command! macro?
-pub struct Command {
+pub struct Command<'a> {
     pub description: String,
     pub args_info: Vec<String>,
-    pub handler: Box<dyn FnMut(&[&str]) -> CommandStatus>,
+    pub handler: Box<dyn 'a + FnMut(&[&str]) -> CommandStatus>,
     pub validator: Box<dyn FnMut(&[&str]) -> Result<(), ArgsError>>,
 }
 
@@ -24,7 +24,7 @@ pub enum ArgsError {
     WrongArgumentValue(String, #[source] anyhow::Error),
 }
 
-impl Command {
+impl<'a> Command<'a> {
     pub fn run(&mut self, args: &[&str]) -> Result<CommandStatus, ArgsError> {
         (self.validator)(args)?;
         Ok((self.handler)(args))
@@ -66,9 +66,7 @@ macro_rules! args_validator {
 /// The command handler should be a lambda that will take all the arguments as a single tuple
 /// and return CommandStatus.
 /// NOTE: even if there are no arguments it must take an empty tuple
-/// NOTE: the closure created for the handler is `move` so takes by value, not by reference,
-///       this is because we store the closures and we cannot borrow
-///       TODO: is it always like this? maybe make `move` optional?
+/// TODO: should there be an option to use closure with `move`?
 /// TODO: find a way to avoid that tuple, is this even possible without procedural macros?
 /// Additional glue logic that parses argument strings into concrete types will be added.
 /// Also, an argument validator will be auto-generated based on provided types.
@@ -87,7 +85,7 @@ macro_rules! command {
     (@handler $($type:ty)*, $handler:expr) => {
         Box::new(|args| {
             let tuple_args: ($($type,)*) = command!(@tuple args; $($type;)*);
-            let handler = $handler;
+            let mut handler = $handler;
             handler(tuple_args)
         })
     };

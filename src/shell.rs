@@ -5,15 +5,24 @@ use rustyline::error::ReadlineError;
 
 use crate::command::{Command, CommandStatus, ArgsError};
 
-pub struct Shell {
-    pub description: String,
-    pub prompt: String,
-    pub commands: HashMap<String, Command>,
-    pub editor: rustyline::Editor<()>,
+pub struct Shell<'a> {
+    description: String,
+    prompt: String,
+    commands: HashMap<String, Command<'a>>,
+    editor: rustyline::Editor<()>,
 }
 
-impl Shell {
-    pub fn add(&mut self, description: &str, cmd: Command) {
+impl<'a> Shell<'a> {
+    pub fn new(prompt: &str, description: &str) -> Self {
+        Self {
+            description: description.into(),
+            prompt: prompt.into(),
+            commands: HashMap::new(),
+            editor: rustyline::Editor::<()>::new()
+        }
+    }
+
+    pub fn add(&mut self, description: &str, cmd: Command<'a>) {
         self.commands.insert(description.into(), cmd);
     }
 
@@ -97,15 +106,6 @@ Available commands:
     }
 
     pub fn run(&mut self) {
-        use crate::{command, args_validator};
-        self.add("help", command! {
-            "Show help",
-            => |()| {
-                println!("{}", self.help());
-                CommandStatus::Done
-            },
-        });
-
         while self.next() {}
     }
 }
