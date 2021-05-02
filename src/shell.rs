@@ -21,6 +21,7 @@ pub struct Shell<'a> {
     editor: rustyline::Editor<()>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum LoopStatus {
     Continue,
     Break,
@@ -249,5 +250,45 @@ mod tests {
             .add("name_x", command!("", => |()| CommandStatus::Done))
             .build();
         assert!(matches!(result, Err(ShellBuilderError::DuplicateCommands(_))));
+    }
+
+    #[test]
+    fn builder_empty() {
+        let result = Shell::builder()
+            .add("", command!("", => |()| CommandStatus::Done))
+            .build();
+        assert!(matches!(result, Err(ShellBuilderError::NameWithSpaces(_))));
+    }
+
+    #[test]
+    fn builder_spaces() {
+        let result = Shell::builder()
+            .add("name-with spaces", command!("", => |()| CommandStatus::Done))
+            .build();
+        assert!(matches!(result, Err(ShellBuilderError::NameWithSpaces(_))));
+    }
+
+    #[test]
+    fn builder_reserved() {
+        let result = Shell::builder()
+            .add("help", command!("", => |()| CommandStatus::Done))
+            .build();
+        assert!(matches!(result, Err(ShellBuilderError::ReservedName(_))));
+        let result = Shell::builder()
+            .add("quit", command!("", => |()| CommandStatus::Done))
+            .build();
+        assert!(matches!(result, Err(ShellBuilderError::ReservedName(_))));
+    }
+
+    #[test]
+    fn shell_quits() {
+        let mut shell = Shell::builder()
+            .add("foo", command!("description", => |()| CommandStatus::Done))
+            .build().unwrap();
+        assert_eq!(shell.handle_line("quit".into()), LoopStatus::Break);
+        let mut shell = Shell::builder()
+            .add("foo", command!("description", => |()| CommandStatus::Quit))
+            .build().unwrap();
+        assert_eq!(shell.handle_line("foo".into()), LoopStatus::Break);
     }
 }
