@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Write};
 
 use rustyline::{self, error::ReadlineError};
 use textwrap;
@@ -19,6 +19,7 @@ pub struct Shell<'a> {
     commands: HashMap<String, Command<'a>>,
     trie: Trie<u8>,
     editor: rustyline::Editor<()>,
+    out: Box<dyn Write>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -27,12 +28,12 @@ pub enum LoopStatus {
     Break,
 }
 
-#[derive(Debug)]
 pub struct ShellBuilder<'a> {
     description: String,
     prompt: String,
     text_width: usize,
     commands: Vec<(String, Command<'a>)>,
+    out: Box<dyn Write>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -52,6 +53,7 @@ impl<'a> Default for ShellBuilder<'a> {
             text_width: 80,
             description: Default::default(),
             commands: Default::default(),
+            out: Box::new(std::io::stderr()),
         }
     }
 }
@@ -69,6 +71,7 @@ impl<'a> ShellBuilder<'a> {
     setter!(description: String);
     setter!(prompt: String);
     setter!(text_width: usize);
+    setter!(out: Box<dyn Write>);
 
     pub fn add(mut self, name: &str, cmd: Command<'a>) -> Self {
         self.commands.push((name.into(), cmd));
@@ -98,6 +101,7 @@ impl<'a> ShellBuilder<'a> {
             commands,
             trie: trie.build(),
             editor: rustyline::Editor::<()>::new(),
+            out: self.out,
         })
     }
 }
@@ -160,12 +164,12 @@ Other commands:
         let prefix = args[0];
         let mut candidates = self.find_command(prefix);
         if candidates.len() != 1 {
-            eprintln!("Command not found: {}", prefix);
+            writeln!(&mut self.out, "Command not found: {}", prefix).unwrap();
             if candidates.len() > 1 {
                 candidates.sort();
-                eprintln!("Candidates:\n  {}", candidates.join("\n  "));
+                writeln!(&mut self.out, "Candidates:\n  {}", candidates.join("\n  ")).unwrap();
             }
-            eprintln!("Use 'help' to see available commands.");
+            writeln!(&mut self.out, "Use 'help' to see available commands.").unwrap();
             LoopStatus::Continue
         } else {
             let name = &candidates[0];
@@ -173,14 +177,14 @@ Other commands:
                 Ok(CommandStatus::Done) => LoopStatus::Continue,
                 Ok(CommandStatus::Quit) => LoopStatus::Break,
                 Ok(CommandStatus::Failure(err)) => {
-                    eprintln!("Command failed: {}", err);
+                    writeln!(&mut self.out, "Command failed: {}", err).unwrap();
                     LoopStatus::Continue
                 },
                 Err(err) => {
                     // in case of ArgsError it cannot have been reserved command
                     let cmd = self.commands.get_mut(name).unwrap();
-                    eprintln!("Error: {}", err);
-                    eprintln!("Usage: {}", cmd.args_info.join(" "));
+                    writeln!(&mut self.out, "Error: {}", err).unwrap();
+                    writeln!(&mut self.out, "Usage: {}", cmd.args_info.join(" ")).unwrap();
                     LoopStatus::Continue
                 }
             }
@@ -198,15 +202,14 @@ Other commands:
                 }
             },
             Err(ReadlineError::Interrupted) => {
-                eprintln!("CTRL-C");
+                writeln!(&mut self.out, "CTRL-C").unwrap();
                 LoopStatus::Break
             },
             Err(ReadlineError::Eof) => {
-                // println!("CTRL-D");
                 LoopStatus::Break
             },
             Err(err) => {
-                eprintln!("Error: {:?}", err);
+                writeln!(&mut self.out, "Error: {:?}", err).unwrap();
                 LoopStatus::Continue
             },
         }
@@ -221,7 +224,8 @@ Other commands:
     fn handle_command(&mut self, name: &str, args: &[&str]) -> Result<CommandStatus, ArgsError> {
         match name {
             "help" => {
-                println!("{}", self.help());
+                let help = self.help();
+                writeln!(&mut self.out, "{}", help).unwrap();
                 Ok(CommandStatus::Done)
             },
             "quit" => Ok(CommandStatus::Quit),
