@@ -8,3 +8,9 @@ edition = "2018"
 rustyline = "8.0"
 thiserror = "1.0"
 anyhow = "1.0"
+textwrap = "0.13"
+trie-rs = "0.1"
+
+[dev-dependencies]
+radix_trie = "0.2.1"
+cedarwood = "0.4.4"

@@ -31,6 +31,14 @@ impl<'a> Command<'a> {
     }
 }
 
+impl<'a> std::fmt::Debug for Command<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Command")
+            .field("description", &self.description)
+            .finish()
+    }
+}
+
 /// Helper macro that allows to replace one expression with another (possibly "noop" one)
 #[macro_export]
 macro_rules! replace_expr {

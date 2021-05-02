@@ -1,52 +1,136 @@
 use std::collections::HashMap;
 
-use rustyline;
-use rustyline::error::ReadlineError;
+use rustyline::{self, error::ReadlineError};
+use textwrap;
+use thiserror;
+use trie_rs::{Trie, TrieBuilder};
 
 use crate::command::{Command, CommandStatus, ArgsError};
+
+pub const RESERVED: &'static [(&'static str, &'static str)] = &[
+    ("help", "Show this help message"),
+    ("quit", "Quit shell"),
+];
 
 pub struct Shell<'a> {
     description: String,
     prompt: String,
+    text_width: usize,
     commands: HashMap<String, Command<'a>>,
+    trie: Trie<u8>,
     editor: rustyline::Editor<()>,
 }
 
+pub enum LoopStatus {
+    Continue,
+    Break,
+}
 
-impl<'a> Shell<'a> {
-    pub const RESERVED: &'static [(&'static str, &'static str)] = &[
-        ("help", "Show this help message"),
-        ("quit", "Quit shell"),
-    ];
+#[derive(Debug)]
+pub struct ShellBuilder<'a> {
+    description: String,
+    prompt: String,
+    text_width: usize,
+    commands: Vec<(String, Command<'a>)>,
+}
 
-    pub fn new(prompt: &str, description: &str) -> Self {
-        Self {
-            description: description.into(),
-            prompt: prompt.into(),
-            commands: HashMap::new(),
-            editor: rustyline::Editor::<()>::new()
+#[derive(Debug, thiserror::Error)]
+pub enum ShellBuilderError {
+    #[error("more than one command with name '{0}' added")]
+    DuplicateCommands(String),
+    #[error("name '{0}' contains spaces or is empty, thus would be impossible to call")]
+    NameWithSpaces(String),
+    #[error("'{0}' is a reserved command name")]
+    ReservedName(String),
+}
+
+impl<'a> Default for ShellBuilder<'a> {
+    fn default() -> Self {
+        ShellBuilder {
+            prompt: "> ".into(),
+            text_width: 80,
+            description: Default::default(),
+            commands: Default::default(),
         }
     }
+}
 
-    pub fn add(&mut self, name: &str, cmd: Command<'a>) {
-        if Self::RESERVED.iter().find(|&&e| e.0 == name).is_some() {
-            eprintln!("Command {} is a reserved name and will be ignored!", name);
+macro_rules! setter {
+    ($name:ident: $type:ty) => {
+        pub fn $name<T: Into<$type>>(mut self, v: T) -> Self {
+            self.$name = v.into();
+            self
         }
-        self.commands.insert(name.into(), cmd);
+    };
+}
+
+impl<'a> ShellBuilder<'a> {
+    setter!(description: String);
+    setter!(prompt: String);
+    setter!(text_width: usize);
+
+    pub fn add(mut self, name: &str, cmd: Command<'a>) -> Self {
+        self.commands.push((name.into(), cmd));
+        self
+    }
+    pub fn build(self) -> Result<Shell<'a>, ShellBuilderError> {
+        let mut commands = HashMap::new();
+        let mut trie = TrieBuilder::new();
+        for (name, cmd) in self.commands.into_iter() {
+            let old = commands.insert(name.clone(), cmd);
+            if name.split(char::is_whitespace).count() != 1 || name.is_empty() {
+                return Err(ShellBuilderError::NameWithSpaces(name));
+            } else if RESERVED.iter().find(|&&(n, _)| n == name).is_some() {
+                return Err(ShellBuilderError::ReservedName(name));
+            } else if old.is_some() {
+                return Err(ShellBuilderError::DuplicateCommands(name));
+            }
+            trie.push(name);
+        }
+        for (name, _) in RESERVED.iter() {
+            trie.push(name);
+        }
+        Ok(Shell {
+            description: self.description,
+            prompt: self.prompt,
+            text_width: self.text_width,
+            commands,
+            trie: trie.build(),
+            editor: rustyline::Editor::<()>::new(),
+        })
+    }
+}
+
+impl<'a> Shell<'a> {
+    pub fn builder() -> ShellBuilder<'a> {
+        ShellBuilder::default()
+    }
+
+    fn format_help_entries(&self, entries: &[(String, String)]) -> String {
+        if entries.is_empty() {
+            return "".into();
+        }
+        let width = entries.iter()
+            .map(|(sig, _)| sig)
+            .max_by_key(|sig| sig.len())
+            .unwrap().len();
+        entries.iter()
+            .map(|(sig, desc)| {
+                let indent = " ".repeat(width + 2 + 2);
+                let opts = textwrap::Options::new(self.text_width)
+                    .initial_indent("")
+                    .subsequent_indent(&indent);
+                let line = format!("  {:width$}  {}", sig, desc, width = width);
+                textwrap::fill(&line, &opts)
+            })
+            .reduce(|mut out, next| {
+                out.push_str("\n");
+                out.push_str(&next);
+                out
+            }).unwrap()
     }
 
     pub fn help(&self) -> String {
-
-        // let width = [width, Self::RESERVED.iter().map(|(name, desc)| name).max_by_key(|name| name.len())
-
-        let format_entries = |entries: &[(String, String)]| {
-            let width = entries.iter().map(|(sig, _)| sig).max_by_key(|sig| sig.len()).unwrap().len();
-            entries.iter()
-                .map(|(sig, desc)| format!("  {:width$}  {}", sig, desc, width = width))
-                .collect::<Vec<_>>().join("\n")
-        };
-
-        // sort names
         let mut names: Vec<_> = self.commands.keys().collect();
         names.sort();
 
@@ -55,7 +139,7 @@ impl<'a> Shell<'a> {
             .map(|name| (signature(name), self.commands[name.as_str()].description.clone()))
             .collect();
 
-        let other: Vec<_> = Self::RESERVED.iter().map(|(name, desc)| (name.to_string(), desc.to_string())).collect();
+        let other: Vec<_> = RESERVED.iter().map(|(name, desc)| (name.to_string(), desc.to_string())).collect();
 
         let msg = format!(r#"
 {}
@@ -65,64 +149,72 @@ Available commands:
 
 Other commands:
 {}
-        "#, self.description, format_entries(&user), format_entries(&other));
+        "#, self.description, self.format_help_entries(&user), self.format_help_entries(&other));
         msg.trim().into()
     }
 
-    pub fn next(&mut self) -> bool {
+    fn handle_line(&mut self, line: String) -> LoopStatus {
+        // line must not be empty
+        let args: Vec<&str> = line.trim().split(char::is_whitespace).collect();
+        let prefix = args[0];
+        let mut candidates = self.find_command(prefix);
+        if candidates.len() != 1 {
+            eprintln!("Command not found: {}", prefix);
+            if candidates.len() > 1 {
+                candidates.sort();
+                eprintln!("Candidates:\n  {}", candidates.join("\n  "));
+            }
+            eprintln!("Use 'help' to see available commands.");
+            LoopStatus::Continue
+        } else {
+            let name = &candidates[0];
+            match self.handle_command(name, &args[1..]) {
+                Ok(CommandStatus::Done) => LoopStatus::Continue,
+                Ok(CommandStatus::Quit) => LoopStatus::Break,
+                Ok(CommandStatus::Failure(err)) => {
+                    eprintln!("Command failed: {}", err);
+                    LoopStatus::Continue
+                },
+                Err(err) => {
+                    // in case of ArgsError it cannot have been reserved command
+                    let cmd = self.commands.get_mut(name).unwrap();
+                    eprintln!("Error: {}", err);
+                    eprintln!("Usage: {}", cmd.args_info.join(" "));
+                    LoopStatus::Continue
+                }
+            }
+        }
+    }
+
+    pub fn next(&mut self) -> LoopStatus {
         match self.editor.readline(&self.prompt) {
             Ok(line) => {
-                let args: Vec<&str> = line.trim().split(char::is_whitespace).collect();
-                if args.len() != 0 && args[0].len() > 0 {
-                    match self.find_command(args[0]) {
-                        None => {
-                            println!("Command not found: {}", args[0]);
-                        },
-                        Some(cmd_name) => {
-                            // handle errors/return
-                            match self.handle_command(&cmd_name, &args[1..]) {
-                                Ok(CommandStatus::Done) => {},
-                                Ok(CommandStatus::Quit) => {
-                                    return false;
-                                },
-                                Ok(CommandStatus::Failure(err)) => {
-                                    println!("Command failed: {}", err);
-                                },
-                                Err(err) => {
-                                    // in case of ArgsError it cannot have been reserved command
-                                    let cmd = self.commands.get_mut(&cmd_name).unwrap();
-                                    println!("Error: {}", err);
-                                    println!("Usage: {}", cmd.args_info.join(" "))
-                                }
-                            };
-                        }
-                    }
-                    self.editor.add_history_entry(line);
+                if !line.trim().is_empty() {
+                    self.editor.add_history_entry(line.clone());
+                    self.handle_line(line)
+                } else {
+                    LoopStatus::Continue
                 }
             },
             Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
-                return false;
+                eprintln!("CTRL-C");
+                LoopStatus::Break
             },
             Err(ReadlineError::Eof) => {
                 // println!("CTRL-D");
-                return false;
+                LoopStatus::Break
             },
             Err(err) => {
-                println!("Error: {:?}", err);
+                eprintln!("Error: {:?}", err);
+                LoopStatus::Continue
             },
-        };
-        true
+        }
     }
 
-    fn find_command(&self, name: &str) -> Option<String> {
-        if Self::RESERVED.iter().find(|&&n| n.0 == name).is_some() {
-            Some(name.into())
-        } else if self.commands.contains_key(name) {
-            Some(name.into())
-        } else {
-            None
-        }
+    fn find_command(&self, name: &str) -> Vec<String> {
+        self.trie.predictive_search(name).into_iter()
+            .map(|bytes| String::from_utf8(bytes).unwrap())
+            .collect()
     }
 
     fn handle_command(&mut self, name: &str, args: &[&str]) -> Result<CommandStatus, ArgsError> {
@@ -133,13 +225,14 @@ Other commands:
             },
             "quit" => Ok(CommandStatus::Quit),
             _ => {
-                let cmd = self.commands.get_mut(name).unwrap();  // find_command must have returned correct name
+                // find_command must have returned correct name
+                let cmd = self.commands.get_mut(name).unwrap();
                 cmd.run(args)
             }
         }
     }
 
     pub fn run(&mut self) {
-        while self.next() {}
+        while let LoopStatus::Continue = self.next() {}
     }
 }
