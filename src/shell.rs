@@ -236,3 +236,18 @@ Other commands:
         while let LoopStatus::Continue = self.next() {}
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::command;
+
+    #[test]
+    fn builder_duplicate() {
+        let result = Shell::builder()
+            .add("name_x", command!("", => |()| CommandStatus::Done))
+            .add("name_x", command!("", => |()| CommandStatus::Done))
+            .build();
+        assert!(matches!(result, Err(ShellBuilderError::DuplicateCommands(_))));
+    }
+}

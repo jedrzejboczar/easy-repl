@@ -57,13 +57,17 @@ macro_rules! args_validator {
             if args.len() != n_args {
                 return Err($crate::command::ArgsError::WrongNumberOfArguments(args.len(), n_args));
             }
+            #[allow(unused_variables, unused_mut)]
             let mut i = 0;
-            $(
-                if let Err(err) = args[i].parse::<$type>() {
-                    return Err($crate::command::ArgsError::WrongArgumentValue(args[i].into(), err.into()));
-                }
-                i += 1;
-            )*
+            #[allow(unused_assignments)]
+            {
+                $(
+                    if let Err(err) = args[i].parse::<$type>() {
+                        return Err($crate::command::ArgsError::WrongArgumentValue(args[i].into(), err.into()));
+                    }
+                    i += 1;
+                )*
+            }
 
             Ok(())
         }
@@ -91,8 +95,9 @@ macro_rules! command {
         }
     };
     (@handler $($type:ty)*, $handler:expr) => {
-        Box::new(|args| {
+        Box::new(|#[allow(unused_variables)] args| {
             let tuple_args: ($($type,)*) = command!(@tuple args; $($type;)*);
+            #[allow(unused_mut)]
             let mut handler = $handler;
             handler(tuple_args)
         })
@@ -124,10 +129,10 @@ mod tests {
         let mut cmd = Command {
             description: "Test command".into(),
             args_info: vec![],
-            handler: Box::new(|args| {
+            handler: Box::new(|_args| {
                 CommandStatus::Done
             }),
-            validator: Box::new(|args| {
+            validator: Box::new(|_args| {
                 Ok(())
             }),
         };
@@ -210,20 +215,20 @@ mod tests {
 
     #[test]
     fn command_auto_args_info() {
-        let mut cmd = command!("Example cmd", i32 String f32 => |(_x, _s, _y)| { CommandStatus::Done });
+        let cmd = command!("Example cmd", i32 String f32 => |(_x, _s, _y)| { CommandStatus::Done });
         assert_eq!(cmd.args_info, &[":i32", ":String", ":f32"]);
-        let mut cmd = command!("Example cmd", i32 f32 => |(_x, _y)| { CommandStatus::Done });
+        let cmd = command!("Example cmd", i32 f32 => |(_x, _y)| { CommandStatus::Done });
         assert_eq!(cmd.args_info, &[":i32", ":f32"]);
-        let mut cmd = command!("Example cmd", f32 => |(_x)| { CommandStatus::Done });
+        let cmd = command!("Example cmd", f32 => |(_x,)| { CommandStatus::Done });
         assert_eq!(cmd.args_info, &[":f32"]);
-        let mut cmd = command!("Example cmd", => |()| { CommandStatus::Done });
+        let cmd = command!("Example cmd", => |()| { CommandStatus::Done });
         let res: &[&str] = &[];
         assert_eq!(cmd.args_info, res);
     }
 
     #[test]
     fn command_auto_args_info_with_names() {
-        let mut cmd = command! {
+        let cmd = command! {
             "Example cmd",
             i32:number String : name f32 => |(_x, _s, _y)| { CommandStatus::Done }
         };

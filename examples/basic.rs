@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 // TODO: merge all of these into a single macro
 use just_repl::{Shell, CommandStatus, command, args_validator, replace_expr};
 use anyhow::{self, Context};
@@ -39,7 +37,7 @@ fn main() -> anyhow::Result<()> {
         .add("outy", just_repl::Command {
             description: "Use mutably outside var y".into(),
             args_info: vec![],
-            handler: Box::new(|args| {
+            handler: Box::new(|_args| {
                 outside_y += "y";
                 println!("{}", outside_y);
                 CommandStatus::Done
