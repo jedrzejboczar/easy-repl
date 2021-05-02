@@ -86,7 +86,7 @@ macro_rules! command {
             args_info: vec![ $(
                 concat!($(stringify!($name), )? ":", stringify!($type)).into()
             ),* ], // TODO
-            validator: std::boxed::Box::new(args_validator!( $($type)* )),
+            validator: std::boxed::Box::new($crate::args_validator!( $($type)* )),
             handler: command!(@handler $($type)*, $handler),
         }
     };
