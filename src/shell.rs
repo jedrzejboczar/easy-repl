@@ -12,7 +12,13 @@ pub struct Shell<'a> {
     editor: rustyline::Editor<()>,
 }
 
+
 impl<'a> Shell<'a> {
+    pub const RESERVED: &'static [(&'static str, &'static str)] = &[
+        ("help", "Show this help message"),
+        ("quit", "Quit shell"),
+    ];
+
     pub fn new(prompt: &str, description: &str) -> Self {
         Self {
             description: description.into(),
@@ -22,27 +28,44 @@ impl<'a> Shell<'a> {
         }
     }
 
-    pub fn add(&mut self, description: &str, cmd: Command<'a>) {
-        self.commands.insert(description.into(), cmd);
+    pub fn add(&mut self, name: &str, cmd: Command<'a>) {
+        if Self::RESERVED.iter().find(|&&e| e.0 == name).is_some() {
+            eprintln!("Command {} is a reserved name and will be ignored!", name);
+        }
+        self.commands.insert(name.into(), cmd);
     }
 
     pub fn help(&self) -> String {
+
+        // let width = [width, Self::RESERVED.iter().map(|(name, desc)| name).max_by_key(|name| name.len())
+
+        let format_entries = |entries: &[(String, String)]| {
+            let width = entries.iter().map(|(sig, _)| sig).max_by_key(|sig| sig.len()).unwrap().len();
+            entries.iter()
+                .map(|(sig, desc)| format!("  {:width$}  {}", sig, desc, width = width))
+                .collect::<Vec<_>>().join("\n")
+        };
+
         // sort names
         let mut names: Vec<_> = self.commands.keys().collect();
         names.sort();
-        // find width for the alignment
-        let signature = |name: &String| format!("  {} {}", name, self.commands[name].args_info.join(" "));
-        let width = names.iter().cloned().map(signature).max_by_key(|sig| sig.len()).unwrap().len();
-        let signatures: Vec<_> = names.iter()
-            .map(|name| format!("{:width$}  {}",
-                signature(name), self.commands[*name].description, width = width))
+
+        let signature = |name: &String| format!("{} {}", name, self.commands[name].args_info.join(" "));
+        let user: Vec<_> = names.iter()
+            .map(|name| (signature(name), self.commands[name.as_str()].description.clone()))
             .collect();
+
+        let other: Vec<_> = Self::RESERVED.iter().map(|(name, desc)| (name.to_string(), desc.to_string())).collect();
+
         let msg = format!(r#"
 {}
 
 Available commands:
 {}
-        "#, self.description, signatures.join("\n"));
+
+Other commands:
+{}
+        "#, self.description, format_entries(&user), format_entries(&other));
         msg.trim().into()
     }
 
@@ -56,10 +79,8 @@ Available commands:
                             println!("Command not found: {}", args[0]);
                         },
                         Some(cmd_name) => {
-                            // find_command must have returned correct name
-                            let cmd = self.commands.get_mut(&cmd_name).unwrap();
                             // handle errors/return
-                            match cmd.run(&args[1..]) {
+                            match self.handle_command(&cmd_name, &args[1..]) {
                                 Ok(CommandStatus::Done) => {},
                                 Ok(CommandStatus::Quit) => {
                                     return false;
@@ -68,13 +89,15 @@ Available commands:
                                     println!("Command failed: {}", err);
                                 },
                                 Err(err) => {
+                                    // in case of ArgsError it cannot have been reserved command
+                                    let cmd = self.commands.get_mut(&cmd_name).unwrap();
                                     println!("Error: {}", err);
                                     println!("Usage: {}", cmd.args_info.join(" "))
                                 }
                             };
-                            self.editor.add_history_entry(line);
                         }
                     }
+                    self.editor.add_history_entry(line);
                 }
             },
             Err(ReadlineError::Interrupted) => {
@@ -93,16 +116,27 @@ Available commands:
     }
 
     fn find_command(&self, name: &str) -> Option<String> {
-        if self.commands.contains_key(name) {
+        if Self::RESERVED.iter().find(|&&n| n.0 == name).is_some() {
+            Some(name.into())
+        } else if self.commands.contains_key(name) {
             Some(name.into())
         } else {
             None
         }
     }
 
-    fn handle_command(&mut self, name: String, args: &[&str]) -> Result<CommandStatus, ArgsError> {
-        let cmd = self.commands.get_mut(&name).unwrap();  // find_command must have returned correct name
-        cmd.run(args)
+    fn handle_command(&mut self, name: &str, args: &[&str]) -> Result<CommandStatus, ArgsError> {
+        match name {
+            "help" => {
+                println!("{}", self.help());
+                Ok(CommandStatus::Done)
+            },
+            "quit" => Ok(CommandStatus::Quit),
+            _ => {
+                let cmd = self.commands.get_mut(name).unwrap();  // find_command must have returned correct name
+                cmd.run(args)
+            }
+        }
     }
 
     pub fn run(&mut self) {
