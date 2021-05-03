@@ -21,13 +21,14 @@ impl Hinter for Completion {
         if !self.with_hints {
             return None;
         }
-        let prefix = &line[..pos];
+        let start = whitespace_before(line);
+        let prefix = &line[start..pos];
         if pos < line.len() || prefix.is_empty() {
             None
         } else {
             let candidates = completion_candidates(&self.trie, prefix);
             if candidates.len() == 1 {
-                Some(candidates[0][pos..].into())
+                Some(candidates[0][(pos - start)..].into())
             } else {
                 None
             }
@@ -66,13 +67,13 @@ impl Completion {
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<Option<(usize, Vec<<Self as Completer>::Candidate>)>> {
         let args = split_args(line);
-        let on_first = args.is_empty() || pos == args[0].len();
+        let on_first = args.len() < 2;
         let completions = if on_first {
             let candidates = completion_candidates(&self.trie, args[0])
                 .into_iter()
                 .map(|c| Pair { display: c.clone(), replacement: c })
                 .collect();
-            Some((0, candidates))
+            Some((whitespace_before(line), candidates))
         } else {
             None
         };
@@ -90,3 +91,6 @@ pub(crate) fn completion_candidates(trie: &Trie<u8>, prefix: &str) -> Vec<String
     }
 }
 
+fn whitespace_before(line: &str) -> usize {
+    line.chars().take_while(|c| char::is_whitespace(*c)).count()
+}

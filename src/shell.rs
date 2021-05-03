@@ -230,7 +230,7 @@ Other commands:
         match self.editor.readline(&self.prompt) {
             Ok(line) => {
                 if !line.trim().is_empty() {
-                    self.editor.add_history_entry(line.clone());
+                    self.editor.add_history_entry(line.trim());
                     self.handle_line(line)
                 } else {
                     LoopStatus::Continue
