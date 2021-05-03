@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use rustyline::{completion::{Completer, FilenameCompleter, Pair}, hint::Hinter};
 use rustyline_derive::{Helper, Highlighter, Validator};
-use trie_rs::{Trie, TrieBuilder};
+use trie_rs::Trie;
 
 use crate::shell::split_args;
 
@@ -63,7 +63,7 @@ impl Completion {
     fn complete_command(
         &self,
         line: &str,
-        pos: usize,
+        _pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<Option<(usize, Vec<<Self as Completer>::Candidate>)>> {
         let args = split_args(line);

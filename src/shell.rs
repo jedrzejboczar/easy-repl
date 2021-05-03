@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, io::Write, rc::Rc};
+use std::{collections::HashMap, io::Write, rc::Rc};
 
 use rustyline::{self, completion::FilenameCompleter, error::ReadlineError};
 use textwrap;
@@ -21,6 +21,7 @@ pub struct Shell<'a> {
     trie: Rc<Trie<u8>>,
     editor: rustyline::Editor<Completion>,
     out: Box<dyn Write>,
+    predict_commands: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -30,15 +31,16 @@ pub enum LoopStatus {
 }
 
 pub struct ShellBuilder<'a> {
+    commands: Vec<(String, Command<'a>)>,
     description: String,
     prompt: String,
     text_width: usize,
-    commands: Vec<(String, Command<'a>)>,
     editor_config: rustyline::config::Config,
+    out: Box<dyn Write>,
     with_hints: bool,
     with_completion: bool,
     with_filename_completion: bool,
-    out: Box<dyn Write>,
+    predict_commands: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +72,7 @@ impl<'a> Default for ShellBuilder<'a> {
             with_hints: true,
             with_completion: true,
             with_filename_completion: false,
+            predict_commands: true,
         }
     }
 }
@@ -87,8 +90,12 @@ impl<'a> ShellBuilder<'a> {
     setter!(description: String);
     setter!(prompt: String);
     setter!(text_width: usize);
-    setter!(out: Box<dyn Write>);
     setter!(editor_config: rustyline::config::Config);
+    setter!(out: Box<dyn Write>);
+    setter!(with_hints: bool);
+    setter!(with_completion: bool);
+    setter!(with_filename_completion: bool);
+    setter!(predict_commands: bool);
 
     pub fn add(mut self, name: &str, cmd: Command<'a>) -> Self {
         self.commands.push((name.into(), cmd));
@@ -137,6 +144,7 @@ impl<'a> ShellBuilder<'a> {
             trie,
             editor,
             out: self.out,
+            predict_commands: self.predict_commands,
         })
     }
 }
@@ -198,9 +206,10 @@ Other commands:
         let args: Vec<&str> = split_args(&line);
         let prefix = args[0];
         let mut candidates = completion_candidates(&self.trie, prefix);
-        if candidates.len() != 1 {
+        let exact = candidates.len() == 1 && candidates[0] == prefix;
+        if candidates.len() != 1 || (!self.predict_commands && !exact) {
             writeln!(&mut self.out, "Command not found: {}", prefix).unwrap();
-            if candidates.len() > 1 {
+            if candidates.len() > 1 || (!self.predict_commands && !exact) {
                 candidates.sort();
                 writeln!(&mut self.out, "Candidates:\n  {}", candidates.join("\n  ")).unwrap();
             }
