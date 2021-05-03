@@ -5,7 +5,7 @@ use textwrap;
 use thiserror;
 use trie_rs::{Trie, TrieBuilder};
 
-use crate::command::{Command, CommandStatus, ArgsError};
+use crate::command::{Command, CommandStatus, CriticalError, ArgsError};
 use crate::completion::{Completion, completion_candidates};
 
 pub const RESERVED: &'static [(&'static str, &'static str)] = &[
@@ -201,7 +201,7 @@ Other commands:
         msg.trim().into()
     }
 
-    fn handle_line(&mut self, line: String) -> LoopStatus {
+    fn handle_line(&mut self, line: String) -> anyhow::Result<LoopStatus> {
         // line must not be empty
         let args: Vec<&str> = split_args(&line);
         let prefix = args[0];
@@ -214,52 +214,69 @@ Other commands:
                 writeln!(&mut self.out, "Candidates:\n  {}", candidates.join("\n  ")).unwrap();
             }
             writeln!(&mut self.out, "Use 'help' to see available commands.").unwrap();
-            LoopStatus::Continue
+            Ok(LoopStatus::Continue)
         } else {
             let name = &candidates[0];
             match self.handle_command(name, &args[1..]) {
-                Ok(CommandStatus::Done) => LoopStatus::Continue,
-                Ok(CommandStatus::Quit) => LoopStatus::Break,
-                Ok(CommandStatus::Failure(err)) => {
-                    writeln!(&mut self.out, "Command failed: {}", err).unwrap();
-                    LoopStatus::Continue
+                Ok(CommandStatus::Done) => Ok(LoopStatus::Continue),
+                Ok(CommandStatus::Quit) => Ok(LoopStatus::Break),
+                // Err(err) => {
+                //     match err.downcast_ref::<CriticalError>() {
+                //         Some(critical) => {
+                //             // propagate critical errors to caller
+                //             return Err(critical.into())
+                //         },
+                //         None => {
+                //             // other errors are handler here
+                //             writeln!(&mut self.out, "Error: {}", err).unwrap();
+                //             // in case of ArgsError it cannot have been reserved command
+                //             let cmd = self.commands.get_mut(name).unwrap();
+                //             writeln!(&mut self.out, "Usage: {}", cmd.args_info.join(" ")).unwrap();
+                //             Ok(LoopStatus::Continue)
+                //         },
+                //     }
+                // }
+                Err(err) if err.downcast_ref::<CriticalError>().is_some()  => {
+                    Err(err)
                 },
                 Err(err) => {
+                    // other errors are handler here
+                    writeln!(&mut self.out, "Error: {}", err).unwrap();
                     // in case of ArgsError it cannot have been reserved command
                     let cmd = self.commands.get_mut(name).unwrap();
-                    writeln!(&mut self.out, "Error: {}", err).unwrap();
                     writeln!(&mut self.out, "Usage: {}", cmd.args_info.join(" ")).unwrap();
-                    LoopStatus::Continue
+                    Ok(LoopStatus::Continue)
                 }
             }
         }
     }
 
-    pub fn next(&mut self) -> LoopStatus {
+    pub fn next(&mut self) -> anyhow::Result<LoopStatus> {
         match self.editor.readline(&self.prompt) {
             Ok(line) => {
                 if !line.trim().is_empty() {
                     self.editor.add_history_entry(line.trim());
                     self.handle_line(line)
                 } else {
-                    LoopStatus::Continue
+                    Ok(LoopStatus::Continue)
                 }
             },
             Err(ReadlineError::Interrupted) => {
                 writeln!(&mut self.out, "CTRL-C").unwrap();
-                LoopStatus::Break
+                Ok(LoopStatus::Break)
             },
             Err(ReadlineError::Eof) => {
-                LoopStatus::Break
+                Ok(LoopStatus::Break)
             },
+            // TODO: not sure if these should be propagated or handler here
             Err(err) => {
                 writeln!(&mut self.out, "Error: {:?}", err).unwrap();
-                LoopStatus::Continue
+                Ok(LoopStatus::Continue)
             },
         }
     }
 
-    fn handle_command(&mut self, name: &str, args: &[&str]) -> Result<CommandStatus, ArgsError> {
+    fn handle_command(&mut self, name: &str, args: &[&str]) -> anyhow::Result<CommandStatus> {
         match name {
             "help" => {
                 let help = self.help();
@@ -275,8 +292,9 @@ Other commands:
         }
     }
 
-    pub fn run(&mut self) {
-        while let LoopStatus::Continue = self.next() {}
+    pub fn run(&mut self) -> anyhow::Result<()> {
+        while let LoopStatus::Continue = self.next()? {}
+        Ok(())
     }
 }
 
@@ -288,8 +306,8 @@ mod tests {
     #[test]
     fn builder_duplicate() {
         let result = Repl::builder()
-            .add("name_x", command!("", => |()| CommandStatus::Done))
-            .add("name_x", command!("", => |()| CommandStatus::Done))
+            .add("name_x", command!("", => |()| Ok(CommandStatus::Done)))
+            .add("name_x", command!("", => |()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::DuplicateCommands(_))));
     }
@@ -297,7 +315,7 @@ mod tests {
     #[test]
     fn builder_empty() {
         let result = Repl::builder()
-            .add("", command!("", => |()| CommandStatus::Done))
+            .add("", command!("", => |()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
     }
@@ -305,7 +323,7 @@ mod tests {
     #[test]
     fn builder_spaces() {
         let result = Repl::builder()
-            .add("name-with spaces", command!("", => |()| CommandStatus::Done))
+            .add("name-with spaces", command!("", => |()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
     }
@@ -313,11 +331,11 @@ mod tests {
     #[test]
     fn builder_reserved() {
         let result = Repl::builder()
-            .add("help", command!("", => |()| CommandStatus::Done))
+            .add("help", command!("", => |()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
         let result = Repl::builder()
-            .add("quit", command!("", => |()| CommandStatus::Done))
+            .add("quit", command!("", => |()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
     }
@@ -325,12 +343,12 @@ mod tests {
     #[test]
     fn repl_quits() {
         let mut repl = Repl::builder()
-            .add("foo", command!("description", => |()| CommandStatus::Done))
+            .add("foo", command!("description", => |()| Ok(CommandStatus::Done)))
             .build().unwrap();
-        assert_eq!(repl.handle_line("quit".into()), LoopStatus::Break);
+        assert_eq!(repl.handle_line("quit".into()).unwrap(), LoopStatus::Break);
         let mut repl = Repl::builder()
-            .add("foo", command!("description", => |()| CommandStatus::Quit))
+            .add("foo", command!("description", => |()| Ok(CommandStatus::Quit)))
             .build().unwrap();
-        assert_eq!(repl.handle_line("foo".into()), LoopStatus::Break);
+        assert_eq!(repl.handle_line("foo".into()).unwrap(), LoopStatus::Break);
     }
 }

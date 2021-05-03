@@ -11,7 +11,7 @@ fn matryoshka(name: String) -> anyhow::Result<Repl<'static>> {
             let name = cloned_prompt.clone() + &name;
             let mut repl = matryoshka(name).unwrap();
             repl.run();
-            CommandStatus::Done
+            Ok(CommandStatus::Done)
         }
     };
 
@@ -25,7 +25,7 @@ fn matryoshka(name: String) -> anyhow::Result<Repl<'static>> {
 
 fn main() -> anyhow::Result<()> {
     let mut repl = matryoshka("".into())?;
-    repl.run();
+    repl.run().context("Critical REPL error");
     Ok(())
 }
 

@@ -5,7 +5,7 @@ use anyhow;
 pub struct Command<'a> {
     pub description: String,
     pub args_info: Vec<String>,
-    pub handler: Box<dyn 'a + FnMut(&[&str]) -> CommandStatus>,
+    pub handler: Box<dyn 'a + FnMut(&[&str]) -> anyhow::Result<CommandStatus>>,
     pub validator: Box<dyn FnMut(&[&str]) -> Result<(), ArgsError>>,
 }
 
@@ -13,8 +13,25 @@ pub struct Command<'a> {
 pub enum CommandStatus {
     Done,
     Quit,
-    Failure(anyhow::Error),
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum CriticalError {
+    #[error(transparent)]
+    Critical(#[from] anyhow::Error)
+}
+
+fn critical<E: Into<anyhow::Error>>(err: E) -> CriticalError {
+    CriticalError::Critical(err.into())
+}
+
+// #[derive(Debug, thiserror::Error)]
+// pub enum CommandError {
+//     #[error(transparent)]
+//     Critical(anyhow::Error),
+//     #[error(transparent)]
+//     Args(#[from] ArgsError),
+// }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ArgsError {
@@ -25,9 +42,9 @@ pub enum ArgsError {
 }
 
 impl<'a> Command<'a> {
-    pub fn run(&mut self, args: &[&str]) -> Result<CommandStatus, ArgsError> {
+    pub fn run(&mut self, args: &[&str]) -> anyhow::Result<CommandStatus> {
         (self.validator)(args)?;
-        Ok((self.handler)(args))
+        (self.handler)(args)
     }
 }
 
@@ -91,7 +108,7 @@ macro_rules! command {
         }
     };
     (@handler $($type:ty)*, $handler:expr) => {
-        Box::new( move |#[allow(unused_variables)] args| {
+        Box::new( move |#[allow(unused_variables)] args| -> anyhow::Result<CommandStatus> {
             let tuple_args: ($($type,)*) = command!(@tuple args; $($type;)*);
             #[allow(unused_mut)]
             let mut handler = $handler;
@@ -126,14 +143,14 @@ mod tests {
             description: "Test command".into(),
             args_info: vec![],
             handler: Box::new(|_args| {
-                CommandStatus::Done
+                Ok(CommandStatus::Done)
             }),
             validator: Box::new(|_args| {
                 Ok(())
             }),
         };
         match (cmd.handler)(&[]) {
-            CommandStatus::Done => {},
+            Ok(CommandStatus::Done) => {},
             _ => panic!("Wrong variant")
         };
     }
@@ -168,7 +185,7 @@ mod tests {
         let mut cmd = command! {
             "Example cmd",
             => |()| {
-                CommandStatus::Done
+                Ok(CommandStatus::Done)
             }
         };
         match cmd.run(&[]) {
@@ -183,7 +200,7 @@ mod tests {
         let mut cmd = command! {
             "Example cmd",
             i32 f32 => |(_x, _y)| {
-                CommandStatus::Done
+                Ok(CommandStatus::Done)
             }
         };
         match cmd.run(&["13", "1.1"]) {
@@ -199,25 +216,28 @@ mod tests {
             "Example cmd",
             i32 f32 => |(_x, _y)| {
                 let err = std::io::Error::new(std::io::ErrorKind::InvalidData, "example error");
-                CommandStatus::Failure(err.into())
+                Err(CriticalError::Critical(err.into()).into())
             }
         };
         match cmd.run(&["13", "1.1"]) {
-            Ok(CommandStatus::Failure(_)) => {},
             Ok(v) => panic!("Wrong variant: {:?}", v),
-            Err(e) => panic!("Error: {:?}", e),
+            Err(e) => {
+                if let(e) = e.downcast_ref::<CriticalError>() {
+                    panic!("Wrong error: {:?}", e)
+                }
+            },
         };
     }
 
     #[test]
     fn command_auto_args_info() {
-        let cmd = command!("Example cmd", i32 String f32 => |(_x, _s, _y)| { CommandStatus::Done });
+        let cmd = command!("Example cmd", i32 String f32 => |(_x, _s, _y)| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":String", ":f32"]);
-        let cmd = command!("Example cmd", i32 f32 => |(_x, _y)| { CommandStatus::Done });
+        let cmd = command!("Example cmd", i32 f32 => |(_x, _y)| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":f32"]);
-        let cmd = command!("Example cmd", f32 => |(_x,)| { CommandStatus::Done });
+        let cmd = command!("Example cmd", f32 => |(_x,)| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":f32"]);
-        let cmd = command!("Example cmd", => |()| { CommandStatus::Done });
+        let cmd = command!("Example cmd", => |()| { Ok(CommandStatus::Done) });
         let res: &[&str] = &[];
         assert_eq!(cmd.args_info, res);
     }
@@ -226,7 +246,7 @@ mod tests {
     fn command_auto_args_info_with_names() {
         let cmd = command! {
             "Example cmd",
-            i32:number String : name f32 => |(_x, _s, _y)| { CommandStatus::Done }
+            i32:number String : name f32 => |(_x, _s, _y)| { Ok(CommandStatus::Done) }
         };
         assert_eq!(cmd.args_info, &["number:i32", "name:String", ":f32"]);
     }

@@ -15,14 +15,14 @@ fn main() -> anyhow::Result<()> {
                     print!(" {}", i);
                 }
                 println!();
-                CommandStatus::Done
+                Ok(CommandStatus::Done)
             }
         })
         .add("say", command! {
             "Say X",
             f32 => |(x, )| {
                 println!("x is equal to {}", x);
-                CommandStatus::Done
+                Ok(CommandStatus::Done)
             },
         })
         .add("outx", command! {
@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
             => |()| {
                 outside_x += "x";
                 println!("{}", outside_x);
-                CommandStatus::Done
+                Ok(CommandStatus::Done)
             },
         })
         .add("outy", easy_repl::Command {
@@ -39,13 +39,13 @@ fn main() -> anyhow::Result<()> {
             handler: Box::new(|_args| {
                 outside_y += "y";
                 println!("{}", outside_y);
-                CommandStatus::Done
+                Ok(CommandStatus::Done)
             }),
             validator: Box::new(args_validator!()),
         })
         .build().context("Failed to create repl")?;
 
-    repl.run();
+    repl.run().context("Critical REPL error");
 
     Ok(())
 }
