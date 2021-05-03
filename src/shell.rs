@@ -1,12 +1,12 @@
 use std::{collections::{HashMap, HashSet}, io::Write, rc::Rc};
 
-use rustyline::{self, completion::{Completer, FilenameCompleter, Pair}, error::ReadlineError, hint::Hinter};
-use rustyline_derive::{Helper, Highlighter, Validator};
+use rustyline::{self, completion::FilenameCompleter, error::ReadlineError};
 use textwrap;
 use thiserror;
 use trie_rs::{Trie, TrieBuilder};
 
 use crate::command::{Command, CommandStatus, ArgsError};
+use crate::completion::{Completion, completion_candidates};
 
 pub const RESERVED: &'static [(&'static str, &'static str)] = &[
     ("help", "Show this help message"),
@@ -19,7 +19,7 @@ pub struct Shell<'a> {
     text_width: usize,
     commands: HashMap<String, Command<'a>>,
     trie: Rc<Trie<u8>>,
-    editor: rustyline::Editor<ShellHelper>,
+    editor: rustyline::Editor<Completion>,
     out: Box<dyn Write>,
 }
 
@@ -51,91 +51,7 @@ pub enum ShellBuilderError {
     ReservedName(String),
 }
 
-#[derive(Helper, Validator, Highlighter)]
-struct ShellHelper {
-    trie: Rc<Trie<u8>>,
-    with_hints: bool,
-    with_completion: bool,
-    filename_completer: Option<FilenameCompleter>,
-}
-
-impl Hinter for ShellHelper {
-    type Hint = String;
-
-    fn hint(&self, line: &str, pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
-        if !self.with_hints {
-            return None;
-        }
-        let prefix = &line[..pos];
-        if pos < line.len() || prefix.is_empty() {
-            None
-        } else {
-            let candidates = command_candidates(&self.trie, prefix);
-            if candidates.len() == 1 {
-                Some(candidates[0][pos..].into())
-            } else {
-                None
-            }
-        }
-    }
-}
-
-impl Completer for ShellHelper {
-    type Candidate = Pair;
-
-    fn complete(
-        &self,
-        line: &str,
-        pos: usize,
-        ctx: &rustyline::Context<'_>,
-    ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        if !self.with_completion {
-            return Ok((0, Vec::with_capacity(0)));
-        }
-        // TODO: revise this logic when we actually start using filename completer
-        if let Some(completion) = self.complete_command(line, pos, ctx)? {
-            Ok(completion)
-        } else if let Some(completer) = self.filename_completer.as_ref() {
-            completer.complete(line, pos, ctx)
-        } else {
-            Ok((0, Vec::with_capacity(0)))
-        }
-    }
-}
-
-impl ShellHelper {
-    fn complete_command(
-        &self,
-        line: &str,
-        pos: usize,
-        _ctx: &rustyline::Context<'_>,
-    ) -> rustyline::Result<Option<(usize, Vec<<Self as Completer>::Candidate>)>> {
-        let args = split_args(line);
-        let on_first = args.is_empty() || pos == args[0].len();
-        let completions = if on_first {
-            let candidates = command_candidates(&self.trie, args[0])
-                .into_iter()
-                .map(|c| Pair { display: c.clone(), replacement: c })
-                .collect();
-            Some((0, candidates))
-        } else {
-            None
-        };
-        Ok(completions)
-    }
-}
-
-fn command_candidates(trie: &Trie<u8>, prefix: &str) -> Vec<String> {
-    if prefix.is_empty() {
-        Vec::with_capacity(0)
-    } else {
-        trie.predictive_search(prefix).into_iter()
-            .map(|bytes| String::from_utf8(bytes).unwrap())
-            .collect()
-    }
-}
-
-fn split_args(line: &str) -> Vec<&str> {
+pub(crate) fn split_args(line: &str) -> Vec<&str> {
     line.trim().split(char::is_whitespace).collect()
 }
 
@@ -197,7 +113,7 @@ impl<'a> ShellBuilder<'a> {
         }
 
         let trie = Rc::new(trie.build());
-        let helper = ShellHelper {
+        let helper = Completion {
             trie: trie.clone(),
             with_hints: self.with_hints,
             with_completion: self.with_completion,
@@ -281,7 +197,7 @@ Other commands:
         // line must not be empty
         let args: Vec<&str> = split_args(&line);
         let prefix = args[0];
-        let mut candidates = command_candidates(&self.trie, prefix);
+        let mut candidates = completion_candidates(&self.trie, prefix);
         if candidates.len() != 1 {
             writeln!(&mut self.out, "Command not found: {}", prefix).unwrap();
             if candidates.len() > 1 {
