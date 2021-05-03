@@ -21,18 +21,6 @@ pub enum CriticalError {
     Critical(#[from] anyhow::Error)
 }
 
-fn critical<E: Into<anyhow::Error>>(err: E) -> CriticalError {
-    CriticalError::Critical(err.into())
-}
-
-// #[derive(Debug, thiserror::Error)]
-// pub enum CommandError {
-//     #[error(transparent)]
-//     Critical(anyhow::Error),
-//     #[error(transparent)]
-//     Args(#[from] ArgsError),
-// }
-
 #[derive(Debug, thiserror::Error)]
 pub enum ArgsError {
     #[error("wrong number of arguments: got {0}, expected {1}")]
@@ -222,7 +210,7 @@ mod tests {
         match cmd.run(&["13", "1.1"]) {
             Ok(v) => panic!("Wrong variant: {:?}", v),
             Err(e) => {
-                if let(e) = e.downcast_ref::<CriticalError>() {
+                if e.downcast_ref::<CriticalError>().is_some() {
                     panic!("Wrong error: {:?}", e)
                 }
             },

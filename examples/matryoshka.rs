@@ -1,4 +1,4 @@
-use easy_repl::{Repl, CommandStatus, command, args_validator};
+use easy_repl::{Repl, CommandStatus, command};
 use anyhow::{self, Context};
 
 fn matryoshka(name: String) -> anyhow::Result<Repl<'static>> {
@@ -9,8 +9,8 @@ fn matryoshka(name: String) -> anyhow::Result<Repl<'static>> {
         "Enter new repl",
         String:name => |(name, ): (String, )| {
             let name = cloned_prompt.clone() + &name;
-            let mut repl = matryoshka(name).unwrap();
-            repl.run();
+            let mut repl = matryoshka(name)?;
+            repl.run()?;
             Ok(CommandStatus::Done)
         }
     };
@@ -25,7 +25,7 @@ fn matryoshka(name: String) -> anyhow::Result<Repl<'static>> {
 
 fn main() -> anyhow::Result<()> {
     let mut repl = matryoshka("".into())?;
-    repl.run().context("Critical REPL error");
+    repl.run().context("Critical REPL error")?;
     Ok(())
 }
 

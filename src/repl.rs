@@ -220,31 +220,17 @@ Other commands:
             match self.handle_command(name, &args[1..]) {
                 Ok(CommandStatus::Done) => Ok(LoopStatus::Continue),
                 Ok(CommandStatus::Quit) => Ok(LoopStatus::Break),
-                // Err(err) => {
-                //     match err.downcast_ref::<CriticalError>() {
-                //         Some(critical) => {
-                //             // propagate critical errors to caller
-                //             return Err(critical.into())
-                //         },
-                //         None => {
-                //             // other errors are handler here
-                //             writeln!(&mut self.out, "Error: {}", err).unwrap();
-                //             // in case of ArgsError it cannot have been reserved command
-                //             let cmd = self.commands.get_mut(name).unwrap();
-                //             writeln!(&mut self.out, "Usage: {}", cmd.args_info.join(" ")).unwrap();
-                //             Ok(LoopStatus::Continue)
-                //         },
-                //     }
-                // }
                 Err(err) if err.downcast_ref::<CriticalError>().is_some()  => {
                     Err(err)
                 },
                 Err(err) => {
                     // other errors are handler here
                     writeln!(&mut self.out, "Error: {}", err).unwrap();
-                    // in case of ArgsError it cannot have been reserved command
-                    let cmd = self.commands.get_mut(name).unwrap();
-                    writeln!(&mut self.out, "Usage: {}", cmd.args_info.join(" ")).unwrap();
+                    if err.downcast_ref::<ArgsError>().is_some() {
+                        // in case of ArgsError we know it could not have been a reserved command
+                        let cmd = self.commands.get_mut(name).unwrap();
+                        writeln!(&mut self.out, "Usage: {} {}", name, cmd.args_info.join(" ")).unwrap();
+                    }
                     Ok(LoopStatus::Continue)
                 }
             }

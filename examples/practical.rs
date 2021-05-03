@@ -6,8 +6,9 @@ fn main() -> anyhow::Result<()> {
     let mut outside_y = String::from("Out y");
 
     let mut repl = Repl::builder()
-        .description("Example repl")
+        .description("Example REPL")
         .prompt("=> ")
+        .text_width(60 as usize)
         .add("count", command! {
             "Count from X to Y",
             i32:X i32:Y => |(x, y)| {
@@ -33,19 +34,21 @@ fn main() -> anyhow::Result<()> {
                 Ok(CommandStatus::Done)
             },
         })
+        // this shows how to create Command manually with the help of args_validator macro
+        // one could also implement validator manually
         .add("outy", easy_repl::Command {
             description: "Use mutably outside var y".into(),
-            args_info: vec![],
-            handler: Box::new(|_args| {
-                outside_y += "y";
+            args_info: vec!["appended".into()],
+            handler: Box::new(|args| {
+                outside_y += args[0];
                 println!("{}", outside_y);
                 Ok(CommandStatus::Done)
             }),
-            validator: Box::new(args_validator!()),
+            validator: Box::new(args_validator!(String)),
         })
         .build().context("Failed to create repl")?;
 
-    repl.run().context("Critical REPL error");
+    repl.run().context("Critical REPL error")?;
 
     Ok(())
 }
