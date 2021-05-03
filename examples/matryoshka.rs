@@ -1,4 +1,4 @@
-use just_repl::{Shell, CommandStatus, command, args_validator};
+use easy_repl::{Shell, CommandStatus, command, args_validator};
 use anyhow::{self, Context};
 
 fn matryoshka(name: String) -> anyhow::Result<Shell<'static>> {

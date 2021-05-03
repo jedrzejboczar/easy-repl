@@ -1,4 +1,4 @@
-use just_repl::{Shell, CommandStatus, command, args_validator};
+use easy_repl::{Shell, CommandStatus, command, args_validator};
 use anyhow::{self, Context};
 
 fn main() -> anyhow::Result<()> {
@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
                 CommandStatus::Done
             },
         })
-        .add("outy", just_repl::Command {
+        .add("outy", easy_repl::Command {
             description: "Use mutably outside var y".into(),
             args_info: vec![],
             handler: Box::new(|_args| {

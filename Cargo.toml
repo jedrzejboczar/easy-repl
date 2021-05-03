@@ -1,5 +1,5 @@
 [package]
-name = "just-repl"
+name = "easy-repl"
 version = "0.1.0"
 authors = ["Jędrzej Boczar <yendreij@gmail.com>"]
 edition = "2018"
