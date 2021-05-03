@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, HashSet}, io::Write, rc::Rc};
 
-use rustyline::{self, completion::{Completer, FilenameCompleter, Pair}, error::ReadlineError, hint::{Hint, Hinter}};
+use rustyline::{self, completion::{Completer, FilenameCompleter, Pair}, error::ReadlineError, hint::Hinter};
 use rustyline_derive::{Helper, Highlighter, Validator};
 use textwrap;
 use thiserror;
@@ -34,6 +34,10 @@ pub struct ShellBuilder<'a> {
     prompt: String,
     text_width: usize,
     commands: Vec<(String, Command<'a>)>,
+    editor_config: rustyline::config::Config,
+    with_hints: bool,
+    with_completion: bool,
+    with_filename_completion: bool,
     out: Box<dyn Write>,
 }
 
@@ -50,6 +54,8 @@ pub enum ShellBuilderError {
 #[derive(Helper, Validator, Highlighter)]
 struct ShellHelper {
     trie: Rc<Trie<u8>>,
+    with_hints: bool,
+    with_completion: bool,
     filename_completer: Option<FilenameCompleter>,
 }
 
@@ -57,6 +63,9 @@ impl Hinter for ShellHelper {
     type Hint = String;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
+        if !self.with_hints {
+            return None;
+        }
         let prefix = &line[..pos];
         if pos < line.len() || prefix.is_empty() {
             None
@@ -80,6 +89,9 @@ impl Completer for ShellHelper {
         pos: usize,
         ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
+        if !self.with_completion {
+            return Ok((0, Vec::with_capacity(0)));
+        }
         // TODO: revise this logic when we actually start using filename completer
         if let Some(completion) = self.complete_command(line, pos, ctx)? {
             Ok(completion)
@@ -96,7 +108,7 @@ impl ShellHelper {
         &self,
         line: &str,
         pos: usize,
-        ctx: &rustyline::Context<'_>,
+        _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<Option<(usize, Vec<<Self as Completer>::Candidate>)>> {
         let args = split_args(line);
         let on_first = args.is_empty() || pos == args[0].len();
@@ -135,6 +147,13 @@ impl<'a> Default for ShellBuilder<'a> {
             description: Default::default(),
             commands: Default::default(),
             out: Box::new(std::io::stderr()),
+            editor_config: rustyline::config::Config::builder()
+                .output_stream(rustyline::OutputStreamType::Stderr)  // NOTE: cannot specify `out`
+                .completion_type(rustyline::CompletionType::List)
+                .build(),
+            with_hints: true,
+            with_completion: true,
+            with_filename_completion: false,
         }
     }
 }
@@ -153,6 +172,7 @@ impl<'a> ShellBuilder<'a> {
     setter!(prompt: String);
     setter!(text_width: usize);
     setter!(out: Box<dyn Write>);
+    setter!(editor_config: rustyline::config::Config);
 
     pub fn add(mut self, name: &str, cmd: Command<'a>) -> Self {
         self.commands.push((name.into(), cmd));
@@ -179,7 +199,13 @@ impl<'a> ShellBuilder<'a> {
         let trie = Rc::new(trie.build());
         let helper = ShellHelper {
             trie: trie.clone(),
-            filename_completer: None,
+            with_hints: self.with_hints,
+            with_completion: self.with_completion,
+            filename_completer: if self.with_filename_completion {
+                Some(FilenameCompleter::new())
+            } else {
+                None
+            },
         };
         let mut editor = rustyline::Editor::with_config(rustyline::config::Config::builder()
             .output_stream(rustyline::OutputStreamType::Stderr)  // NOTE: cannot specify `out`
