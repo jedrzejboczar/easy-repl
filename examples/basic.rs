@@ -1,5 +1,4 @@
-// TODO: merge all of these into a single macro
-use just_repl::{Shell, CommandStatus, command, args_validator, replace_expr};
+use just_repl::{Shell, CommandStatus, command, args_validator};
 use anyhow::{self, Context};
 
 fn main() -> anyhow::Result<()> {

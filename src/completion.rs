@@ -48,7 +48,6 @@ impl Completer for Completion {
         if !self.with_completion {
             return Ok((0, Vec::with_capacity(0)));
         }
-        // TODO: revise this logic when we actually start using filename completer
         if let Some(completion) = self.complete_command(line, pos, ctx)? {
             Ok(completion)
         } else if let Some(completer) = self.filename_completer.as_ref() {

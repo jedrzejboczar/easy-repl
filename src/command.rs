@@ -39,12 +39,6 @@ impl<'a> std::fmt::Debug for Command<'a> {
     }
 }
 
-/// Helper macro that allows to replace one expression with another (possibly "noop" one)
-#[macro_export]
-macro_rules! replace_expr {
-    ($_old:tt $new:expr) => { $new };
-}
-
 /// Takes a list of types and generates a callable that will take a list
 /// of args and try to parse them into the provided types or return an error.
 /// NOTE: for string arguments use String instead of &str
@@ -53,7 +47,7 @@ macro_rules! args_validator {
     ($($type:ty)*) => {
         |args: &[&str]| -> std::result::Result<(), $crate::command::ArgsError> {
             // check the number of arguments
-            let n_args: usize = <[()]>::len(&[ $( replace_expr!($type ()) ),* ]);
+            let n_args: usize = <[()]>::len(&[ $( $crate::args_validator!(@replace $type ()) ),* ]);
             if args.len() != n_args {
                 return Err($crate::command::ArgsError::WrongNumberOfArguments(args.len(), n_args));
             }
@@ -72,6 +66,8 @@ macro_rules! args_validator {
             Ok(())
         }
     };
+    // Helper that allows to replace one expression with another (possibly "noop" one)
+    (@replace $_old:tt $new:expr) => { $new };
 }
 
 /// Creates a Command based on description, list of argument types and a command handler.
