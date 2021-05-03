@@ -10,10 +10,10 @@ use crate::completion::{Completion, completion_candidates};
 
 pub const RESERVED: &'static [(&'static str, &'static str)] = &[
     ("help", "Show this help message"),
-    ("quit", "Quit shell"),
+    ("quit", "Quit repl"),
 ];
 
-pub struct Shell<'a> {
+pub struct Repl<'a> {
     description: String,
     prompt: String,
     text_width: usize,
@@ -30,7 +30,7 @@ pub enum LoopStatus {
     Break,
 }
 
-pub struct ShellBuilder<'a> {
+pub struct ReplBuilder<'a> {
     commands: Vec<(String, Command<'a>)>,
     description: String,
     prompt: String,
@@ -44,7 +44,7 @@ pub struct ShellBuilder<'a> {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ShellBuilderError {
+pub enum BuilderError {
     #[error("more than one command with name '{0}' added")]
     DuplicateCommands(String),
     #[error("name '{0}' contains spaces or is empty, thus would be impossible to call")]
@@ -57,9 +57,9 @@ pub(crate) fn split_args(line: &str) -> Vec<&str> {
     line.trim().split(char::is_whitespace).collect()
 }
 
-impl<'a> Default for ShellBuilder<'a> {
+impl<'a> Default for ReplBuilder<'a> {
     fn default() -> Self {
-        ShellBuilder {
+        ReplBuilder {
             prompt: "> ".into(),
             text_width: 80,
             description: Default::default(),
@@ -86,7 +86,7 @@ macro_rules! setter {
     };
 }
 
-impl<'a> ShellBuilder<'a> {
+impl<'a> ReplBuilder<'a> {
     setter!(description: String);
     setter!(prompt: String);
     setter!(text_width: usize);
@@ -101,17 +101,17 @@ impl<'a> ShellBuilder<'a> {
         self.commands.push((name.into(), cmd));
         self
     }
-    pub fn build(self) -> Result<Shell<'a>, ShellBuilderError> {
+    pub fn build(self) -> Result<Repl<'a>, BuilderError> {
         let mut commands = HashMap::new();
         let mut trie = TrieBuilder::new();
         for (name, cmd) in self.commands.into_iter() {
             let old = commands.insert(name.clone(), cmd);
             if split_args(&name).len() != 1 || name.is_empty() {
-                return Err(ShellBuilderError::NameWithSpaces(name));
+                return Err(BuilderError::NameWithSpaces(name));
             } else if RESERVED.iter().find(|&&(n, _)| n == name).is_some() {
-                return Err(ShellBuilderError::ReservedName(name));
+                return Err(BuilderError::ReservedName(name));
             } else if old.is_some() {
-                return Err(ShellBuilderError::DuplicateCommands(name));
+                return Err(BuilderError::DuplicateCommands(name));
             }
             trie.push(name);
         }
@@ -136,7 +136,7 @@ impl<'a> ShellBuilder<'a> {
             .build());
         editor.set_helper(Some(helper));
 
-        Ok(Shell {
+        Ok(Repl {
             description: self.description,
             prompt: self.prompt,
             text_width: self.text_width,
@@ -149,9 +149,9 @@ impl<'a> ShellBuilder<'a> {
     }
 }
 
-impl<'a> Shell<'a> {
-    pub fn builder() -> ShellBuilder<'a> {
-        ShellBuilder::default()
+impl<'a> Repl<'a> {
+    pub fn builder() -> ReplBuilder<'a> {
+        ReplBuilder::default()
     }
 
     fn format_help_entries(&self, entries: &[(String, String)]) -> String {
@@ -287,50 +287,50 @@ mod tests {
 
     #[test]
     fn builder_duplicate() {
-        let result = Shell::builder()
+        let result = Repl::builder()
             .add("name_x", command!("", => |()| CommandStatus::Done))
             .add("name_x", command!("", => |()| CommandStatus::Done))
             .build();
-        assert!(matches!(result, Err(ShellBuilderError::DuplicateCommands(_))));
+        assert!(matches!(result, Err(BuilderError::DuplicateCommands(_))));
     }
 
     #[test]
     fn builder_empty() {
-        let result = Shell::builder()
+        let result = Repl::builder()
             .add("", command!("", => |()| CommandStatus::Done))
             .build();
-        assert!(matches!(result, Err(ShellBuilderError::NameWithSpaces(_))));
+        assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
     }
 
     #[test]
     fn builder_spaces() {
-        let result = Shell::builder()
+        let result = Repl::builder()
             .add("name-with spaces", command!("", => |()| CommandStatus::Done))
             .build();
-        assert!(matches!(result, Err(ShellBuilderError::NameWithSpaces(_))));
+        assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
     }
 
     #[test]
     fn builder_reserved() {
-        let result = Shell::builder()
+        let result = Repl::builder()
             .add("help", command!("", => |()| CommandStatus::Done))
             .build();
-        assert!(matches!(result, Err(ShellBuilderError::ReservedName(_))));
-        let result = Shell::builder()
+        assert!(matches!(result, Err(BuilderError::ReservedName(_))));
+        let result = Repl::builder()
             .add("quit", command!("", => |()| CommandStatus::Done))
             .build();
-        assert!(matches!(result, Err(ShellBuilderError::ReservedName(_))));
+        assert!(matches!(result, Err(BuilderError::ReservedName(_))));
     }
 
     #[test]
-    fn shell_quits() {
-        let mut shell = Shell::builder()
+    fn repl_quits() {
+        let mut repl = Repl::builder()
             .add("foo", command!("description", => |()| CommandStatus::Done))
             .build().unwrap();
-        assert_eq!(shell.handle_line("quit".into()), LoopStatus::Break);
-        let mut shell = Shell::builder()
+        assert_eq!(repl.handle_line("quit".into()), LoopStatus::Break);
+        let mut repl = Repl::builder()
             .add("foo", command!("description", => |()| CommandStatus::Quit))
             .build().unwrap();
-        assert_eq!(shell.handle_line("foo".into()), LoopStatus::Break);
+        assert_eq!(repl.handle_line("foo".into()), LoopStatus::Break);
     }
 }

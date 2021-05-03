@@ -1,12 +1,12 @@
-use easy_repl::{Shell, CommandStatus, command, args_validator};
+use easy_repl::{Repl, CommandStatus, command, args_validator};
 use anyhow::{self, Context};
 
 fn main() -> anyhow::Result<()> {
     let mut outside_x = String::from("Out x");
     let mut outside_y = String::from("Out y");
 
-    let mut shell = Shell::builder()
-        .description("Example shell")
+    let mut repl = Repl::builder()
+        .description("Example repl")
         .prompt("=> ")
         .add("count", command! {
             "Count from X to Y",
@@ -43,9 +43,9 @@ fn main() -> anyhow::Result<()> {
             }),
             validator: Box::new(args_validator!()),
         })
-        .build().context("Failed to create shell")?;
+        .build().context("Failed to create repl")?;
 
-    shell.run();
+    repl.run();
 
     Ok(())
 }

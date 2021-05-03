@@ -4,7 +4,7 @@ use rustyline::{completion::{Completer, FilenameCompleter, Pair}, hint::Hinter};
 use rustyline_derive::{Helper, Highlighter, Validator};
 use trie_rs::Trie;
 
-use crate::shell::split_args;
+use crate::repl::split_args;
 
 #[derive(Helper, Validator, Highlighter)]
 pub(crate) struct Completion {

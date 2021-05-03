@@ -1,6 +1,6 @@
 pub mod command;
-pub mod shell;
+pub mod repl;
 mod completion;
 
-pub use shell::Shell;
+pub use repl::Repl;
 pub use command::{Command, CommandStatus};
