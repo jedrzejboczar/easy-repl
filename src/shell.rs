@@ -128,7 +128,9 @@ impl<'a> ShellBuilder<'a> {
         let helper = ShellHelper {
             trie: trie.clone(),
         };
-        let mut editor = rustyline::Editor::new();
+        let mut editor = rustyline::Editor::with_config(rustyline::config::Config::builder()
+            .output_stream(rustyline::OutputStreamType::Stderr)  // NOTE: cannot specify `out`
+            .build());
         editor.set_helper(Some(helper));
 
         Ok(Shell {
