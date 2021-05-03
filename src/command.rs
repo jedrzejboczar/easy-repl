@@ -1,7 +1,7 @@
 use thiserror;
 use anyhow;
 
-// TODO: make these private while still exporting the command! macro?
+/// Represents a sign
 pub struct Command<'a> {
     pub description: String,
     pub args_info: Vec<String>,
@@ -91,7 +91,7 @@ macro_rules! command {
         }
     };
     (@handler $($type:ty)*, $handler:expr) => {
-        Box::new(|#[allow(unused_variables)] args| {
+        Box::new( move |#[allow(unused_variables)] args| {
             let tuple_args: ($($type,)*) = command!(@tuple args; $($type;)*);
             #[allow(unused_mut)]
             let mut handler = $handler;
