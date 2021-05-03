@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, io::Write};
+use std::{collections::{HashMap, HashSet}, io::Write, rc::Rc};
 
 use rustyline::{self, error::ReadlineError, hint::{Hint, Hinter}};
 use rustyline_derive::{Completer, Helper, Highlighter, Validator};
@@ -18,7 +18,7 @@ pub struct Shell<'a> {
     prompt: String,
     text_width: usize,
     commands: HashMap<String, Command<'a>>,
-    trie: Trie<u8>,
+    trie: Rc<Trie<u8>>,
     editor: rustyline::Editor<ShellHelper>,
     out: Box<dyn Write>,
 }
@@ -49,52 +49,28 @@ pub enum ShellBuilderError {
 
 #[derive(Completer, Helper, Validator, Highlighter)]
 struct ShellHelper {
-    commands: HashSet<CommandHint>,
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct CommandHint(String);
-
-impl Hint for CommandHint {
-    fn display(&self) -> &str {
-        &self.0
-    }
-
-    fn completion(&self) -> Option<&str> {
-        Some(&self.0)
-    }
+    trie: Rc<Trie<u8>>,
 }
 
 impl Hinter for ShellHelper {
-    type Hint = CommandHint;
+    type Hint = String;
 
     fn hint(&self, line: &str, pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
         if pos < line.len() {
             None
         } else {
-            // will show hint for the first matching command
-            // self.commands.iter()
-            //     .find_map(|hint| {
-            //         if pos > 0 && hint.display().starts_with(&line[..pos]) {
-            //             Some(CommandHint(hint.0[pos..].into()))
-            //         } else {
-            //             None
-            //         }
-            //     })
-            // show hint only if there is a single matching command
-            let mut hints = self.commands.iter()
-                .filter_map(|hint| {
-                    if pos > 0 && hint.display().starts_with(&line[..pos]) {
-                        Some(CommandHint(hint.0[pos..].into()))
-                    } else {
-                        None
-                    }
-                });
-            let mut first = hints.next();
-            if hints.next().is_some() {
-                first.take();
+            let prefix = &line[..pos];
+            if prefix.is_empty() {
+                return None;
             }
-            first
+            let candidates: Vec<_> = self.trie.predictive_search(prefix).into_iter()
+                .map(|bytes| String::from_utf8(bytes).unwrap())
+                .collect();
+            if candidates.len() == 1 {
+                Some(candidates[0][pos..].into())
+            } else {
+                None
+            }
         }
     }
 }
@@ -148,11 +124,9 @@ impl<'a> ShellBuilder<'a> {
             trie.push(name);
         }
 
+        let trie = Rc::new(trie.build());
         let helper = ShellHelper {
-            commands: commands.keys()
-                .map(|name| name.as_str())
-                .chain(RESERVED.iter().map(|(name, _)| *name))
-                .map(|c| CommandHint(c.to_string())).collect()
+            trie: trie.clone(),
         };
         let mut editor = rustyline::Editor::new();
         editor.set_helper(Some(helper));
@@ -162,7 +136,7 @@ impl<'a> ShellBuilder<'a> {
             prompt: self.prompt,
             text_width: self.text_width,
             commands,
-            trie: trie.build(),
+            trie,
             editor,
             out: self.out,
         })
