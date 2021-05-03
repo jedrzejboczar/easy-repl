@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 rustyline = "8.0"
+rustyline-derive = "0.4"
 thiserror = "1.0"
 anyhow = "1.0"
 textwrap = "0.13"
