@@ -65,10 +65,11 @@ impl Completion {
         _pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<Option<(usize, Vec<<Self as Completer>::Candidate>)>> {
-        let args = split_args(line);
-        let on_first = args.len() < 2;
+        // fails if there is an unmatched quote, so assume there are no arguments at all
+        let args = split_args(line).unwrap_or_else(|_e| Vec::with_capacity(0));
+        let on_first = args.len() == 1;
         let completions = if on_first {
-            let candidates = completion_candidates(&self.trie, args[0])
+            let candidates = completion_candidates(&self.trie, &args[0])
                 .into_iter()
                 .map(|c| Pair { display: c.clone(), replacement: c })
                 .collect();

@@ -4,6 +4,7 @@ use rustyline::{self, completion::FilenameCompleter, error::ReadlineError};
 use textwrap;
 use thiserror;
 use trie_rs::{Trie, TrieBuilder};
+use shell_words;
 
 use crate::command::{Command, CommandStatus, CriticalError, ArgsError};
 use crate::completion::{Completion, completion_candidates};
@@ -47,14 +48,14 @@ pub struct ReplBuilder<'a> {
 pub enum BuilderError {
     #[error("more than one command with name '{0}' added")]
     DuplicateCommands(String),
-    #[error("name '{0}' contains spaces or is empty, thus would be impossible to call")]
-    NameWithSpaces(String),
+    #[error("name '{0}' cannot be parsed correctly, thus would be impossible to call")]
+    IncorrectName(String),
     #[error("'{0}' is a reserved command name")]
     ReservedName(String),
 }
 
-pub(crate) fn split_args(line: &str) -> Vec<&str> {
-    line.trim().split(char::is_whitespace).collect()
+pub(crate) fn split_args(line: &str) -> Result<Vec<String>, shell_words::ParseError> {
+    shell_words::split(line)
 }
 
 impl<'a> Default for ReplBuilder<'a> {
@@ -106,8 +107,10 @@ impl<'a> ReplBuilder<'a> {
         let mut trie = TrieBuilder::new();
         for (name, cmd) in self.commands.into_iter() {
             let old = commands.insert(name.clone(), cmd);
-            if split_args(&name).len() != 1 || name.is_empty() {
-                return Err(BuilderError::NameWithSpaces(name));
+            let args = split_args(&name)
+                .map_err(|_e| BuilderError::IncorrectName(name.clone()))?;
+            if args.len() != 1 || name.is_empty() {
+                return Err(BuilderError::IncorrectName(name));
             } else if RESERVED.iter().find(|&&(n, _)| n == name).is_some() {
                 return Err(BuilderError::ReservedName(name));
             } else if old.is_some() {
@@ -202,11 +205,17 @@ Other commands:
     }
 
     fn handle_line(&mut self, line: String) -> anyhow::Result<LoopStatus> {
-        // line must not be empty
-        let args: Vec<&str> = split_args(&line);
-        let prefix = args[0];
+        // if there is any parsing error just continue to next input
+        let args = match split_args(&line)  {
+            Err(err) => {
+                writeln!(&mut self.out, "Error: {}", err).unwrap();
+                return Ok(LoopStatus::Continue);
+            },
+            Ok(args) => args,
+        };
+        let prefix = &args[0];
         let mut candidates = completion_candidates(&self.trie, prefix);
-        let exact = candidates.len() == 1 && candidates[0] == prefix;
+        let exact = candidates.len() == 1 && &candidates[0] == prefix;
         if candidates.len() != 1 || (!self.predict_commands && !exact) {
             writeln!(&mut self.out, "Command not found: {}", prefix).unwrap();
             if candidates.len() > 1 || (!self.predict_commands && !exact) {
@@ -217,7 +226,8 @@ Other commands:
             Ok(LoopStatus::Continue)
         } else {
             let name = &candidates[0];
-            match self.handle_command(name, &args[1..]) {
+            let tail: Vec<_> = args[1..].iter().map(|s| s.as_str()).collect();
+            match self.handle_command(name, &tail) {
                 Ok(CommandStatus::Done) => Ok(LoopStatus::Continue),
                 Ok(CommandStatus::Quit) => Ok(LoopStatus::Break),
                 Err(err) if err.downcast_ref::<CriticalError>().is_some()  => {
@@ -303,7 +313,7 @@ mod tests {
         let result = Repl::builder()
             .add("", command!(""; => || Ok(CommandStatus::Done)))
             .build();
-        assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
+        assert!(matches!(result, Err(BuilderError::IncorrectName(_))));
     }
 
     #[test]
@@ -311,7 +321,7 @@ mod tests {
         let result = Repl::builder()
             .add("name-with spaces", command!(""; => || Ok(CommandStatus::Done)))
             .build();
-        assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
+        assert!(matches!(result, Err(BuilderError::IncorrectName(_))));
     }
 
     #[test]
