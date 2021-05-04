@@ -78,9 +78,6 @@ macro_rules! args_validator {
 /// Creates a Command based on description, list of argument types and a command handler.
 /// The command handler should be a lambda that will take all the arguments as a single tuple
 /// and return CommandStatus.
-/// NOTE: even if there are no arguments it must take an empty tuple
-/// TODO: should there be an option to use closure with `move`?
-/// TODO: find a way to avoid that tuple, is this even possible without procedural macros?
 /// Additional glue logic that parses argument strings into concrete types will be added.
 /// Also, an argument validator will be auto-generated based on provided types.
 #[macro_export]
@@ -97,27 +94,26 @@ macro_rules! command {
     };
     (@handler $($type:ty)*, $handler:expr) => {
         Box::new( move |#[allow(unused_variables)] args| -> anyhow::Result<CommandStatus> {
-            let tuple_args: ($($type,)*) = command!(@tuple args; $($type;)*);
             #[allow(unused_mut)]
             let mut handler = $handler;
-            handler(tuple_args)
+            command!(@handler_call handler; args; $($type;)*)
         })
     };
-    // transform element of Vec $args into tuple elements calling .parse::<$type>().unwrap() on each
-    (@tuple $args:ident; $($types:ty;)*) => {
-        command!(@tuple $args, 0;
-            $($types;)* =>
-        )
+    // transform element of $args into parsed function argument by calling .parse::<$type>().unwrap()
+    // on each, this starts a recursive muncher that constructs following argument getters args[i]
+    (@handler_call $handler:ident; $args:ident; $($types:ty;)*) => {
+        command!(@handler_call $handler, $args, 0; $($types;)* =>)
     };
-    // $num is used to index $args, pop $type from beginning of list, add new parsed at the endo of $parsed
-    (@tuple $args:ident, $num:expr; $type:ty; $($types:ty;)* => $($parsed:expr;)*) => {
-        command!(@tuple $args, $num + 1;
+    // $num is used to index $args; pop $type from beginning of list, add new parsed at the endo of $parsed
+    (@handler_call $handler:ident, $args:ident, $num:expr; $type:ty; $($types:ty;)* => $($parsed:expr;)*) => {
+        command!(@handler_call $handler, $args, $num + 1;
             $($types;)* =>
             $($parsed;)* $args[$num].parse::<$type>().unwrap();
         )
     };
-    (@tuple $args:ident, $num:expr; => $($parsed:expr;)*) => {  // finally emit code when there are no more types
-        ( $($parsed,)* )
+    // finally when there are no more types emit code that calls the handler with all arguments parsed
+    (@handler_call $handler:ident, $args:ident, $num:expr; => $($parsed:expr;)*) => {
+        $handler( $($parsed),* )
     };
 }
 
@@ -172,7 +168,7 @@ mod tests {
     fn command_auto_no_args() {
         let mut cmd = command! {
             "Example cmd",
-            => |()| {
+            => || {
                 Ok(CommandStatus::Done)
             }
         };
@@ -187,7 +183,7 @@ mod tests {
     fn command_auto_with_args() {
         let mut cmd = command! {
             "Example cmd",
-            i32 f32 => |(_x, _y)| {
+            i32 f32 => |_x, _y| {
                 Ok(CommandStatus::Done)
             }
         };
@@ -202,7 +198,7 @@ mod tests {
     fn command_auto_with_failure() {
         let mut cmd = command! {
             "Example cmd",
-            i32 f32 => |(_x, _y)| {
+            i32 f32 => |_x, _y| {
                 let err = std::io::Error::new(std::io::ErrorKind::InvalidData, "example error");
                 Err(CriticalError::Critical(err.into()).into())
             }
@@ -219,13 +215,13 @@ mod tests {
 
     #[test]
     fn command_auto_args_info() {
-        let cmd = command!("Example cmd", i32 String f32 => |(_x, _s, _y)| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", i32 String f32 => |_x, _s, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":String", ":f32"]);
-        let cmd = command!("Example cmd", i32 f32 => |(_x, _y)| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", i32 f32 => |_x, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":f32"]);
-        let cmd = command!("Example cmd", f32 => |(_x,)| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", f32 => |_x| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":f32"]);
-        let cmd = command!("Example cmd", => |()| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", => || { Ok(CommandStatus::Done) });
         let res: &[&str] = &[];
         assert_eq!(cmd.args_info, res);
     }
@@ -234,7 +230,7 @@ mod tests {
     fn command_auto_args_info_with_names() {
         let cmd = command! {
             "Example cmd",
-            i32:number String : name f32 => |(_x, _s, _y)| { Ok(CommandStatus::Done) }
+            i32:number String : name f32 => |_x, _s, _y| { Ok(CommandStatus::Done) }
         };
         assert_eq!(cmd.args_info, &["number:i32", "name:String", ":f32"]);
     }

@@ -5,14 +5,14 @@ fn main() -> anyhow::Result<()> {
     let mut repl = Repl::builder()
         .add("add", command! {
             "Count from X to Y",
-            i32:X i32:Y => |(x, y)| {
+            i32:X i32:Y => |x, y| {
                 println!("{} + {} = {}", x, y, x + y);
                 Ok(CommandStatus::Done)
             }
         })
         .add("mul", command! {
             "Count from X to Y",
-            i32:X i32:Y => |(x, y)| {
+            i32:X i32:Y => |x, y| {
                 println!("{} * {} = {}", x, y, x * y);
                 Ok(CommandStatus::Done)
             }

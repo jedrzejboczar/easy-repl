@@ -292,8 +292,8 @@ mod tests {
     #[test]
     fn builder_duplicate() {
         let result = Repl::builder()
-            .add("name_x", command!("", => |()| Ok(CommandStatus::Done)))
-            .add("name_x", command!("", => |()| Ok(CommandStatus::Done)))
+            .add("name_x", command!("", => || Ok(CommandStatus::Done)))
+            .add("name_x", command!("", => || Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::DuplicateCommands(_))));
     }
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn builder_empty() {
         let result = Repl::builder()
-            .add("", command!("", => |()| Ok(CommandStatus::Done)))
+            .add("", command!("", => || Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
     }
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn builder_spaces() {
         let result = Repl::builder()
-            .add("name-with spaces", command!("", => |()| Ok(CommandStatus::Done)))
+            .add("name-with spaces", command!("", => || Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::NameWithSpaces(_))));
     }
@@ -317,11 +317,11 @@ mod tests {
     #[test]
     fn builder_reserved() {
         let result = Repl::builder()
-            .add("help", command!("", => |()| Ok(CommandStatus::Done)))
+            .add("help", command!("", => || Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
         let result = Repl::builder()
-            .add("quit", command!("", => |()| Ok(CommandStatus::Done)))
+            .add("quit", command!("", => || Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
     }
@@ -329,11 +329,11 @@ mod tests {
     #[test]
     fn repl_quits() {
         let mut repl = Repl::builder()
-            .add("foo", command!("description", => |()| Ok(CommandStatus::Done)))
+            .add("foo", command!("description", => || Ok(CommandStatus::Done)))
             .build().unwrap();
         assert_eq!(repl.handle_line("quit".into()).unwrap(), LoopStatus::Break);
         let mut repl = Repl::builder()
-            .add("foo", command!("description", => |()| Ok(CommandStatus::Quit)))
+            .add("foo", command!("description", => || Ok(CommandStatus::Quit)))
             .build().unwrap();
         assert_eq!(repl.handle_line("foo".into()).unwrap(), LoopStatus::Break);
     }
