@@ -4,15 +4,15 @@ use anyhow::{self, Context};
 fn main() -> anyhow::Result<()> {
     let mut repl = Repl::builder()
         .add("add", command! {
-            "Count from X to Y",
-            i32:X i32:Y => |x, y| {
+            "Count from X to Y";
+            X:i32, Y:i32 => |x, y| {
                 println!("{} + {} = {}", x, y, x + y);
                 Ok(CommandStatus::Done)
             }
         })
         .add("mul", command! {
-            "Count from X to Y",
-            i32:X i32:Y => |x, y| {
+            "Count from X to Y";
+            X:i32, Y:i32 => |x, y| {
                 println!("{} * {} = {}", x, y, x * y);
                 Ok(CommandStatus::Done)
             }

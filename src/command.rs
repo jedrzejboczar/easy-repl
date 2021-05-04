@@ -49,7 +49,7 @@ impl<'a> std::fmt::Debug for Command<'a> {
 /// NOTE: for string arguments use String instead of &str
 #[macro_export]
 macro_rules! args_validator {
-    ($($type:ty)*) => {
+    ($($type:ty),*) => {
         |args: &[&str]| -> std::result::Result<(), $crate::command::ArgsError> {
             // check the number of arguments
             let n_args: usize = <[()]>::len(&[ $( $crate::args_validator!(@replace $type ()) ),* ]);
@@ -82,13 +82,13 @@ macro_rules! args_validator {
 /// Also, an argument validator will be auto-generated based on provided types.
 #[macro_export]
 macro_rules! command {
-    ($description:expr, $($type:ty $(: $name:ident)?)* => $handler:expr $(,)?) => {
+    ($description:expr; $($( $name:ident )? : $type:ty),* => $handler:expr $(,)?) => {
         $crate::command::Command {
             description: $description.into(),
             args_info: vec![ $(
                 concat!($(stringify!($name), )? ":", stringify!($type)).into()
             ),* ], // TODO
-            validator: std::boxed::Box::new($crate::args_validator!( $($type)* )),
+            validator: std::boxed::Box::new($crate::args_validator!( $($type),* )),
             handler: command!(@handler $($type)*, $handler),
         }
     };
@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn validator_multiple_args() {
-        let validator = args_validator!(i32 f32 String);
+        let validator = args_validator!(i32, f32, String);
         assert!(validator(&[]).is_err());
         assert!(validator(&["1", "2.1", "hello"]).is_ok());
         assert!(validator(&["1.2", "2.1", "hello"]).is_err());
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn command_auto_no_args() {
         let mut cmd = command! {
-            "Example cmd",
+            "Example cmd";
             => || {
                 Ok(CommandStatus::Done)
             }
@@ -182,8 +182,8 @@ mod tests {
     #[test]
     fn command_auto_with_args() {
         let mut cmd = command! {
-            "Example cmd",
-            i32 f32 => |_x, _y| {
+            "Example cmd";
+            :i32, :f32 => |_x, _y| {
                 Ok(CommandStatus::Done)
             }
         };
@@ -197,8 +197,8 @@ mod tests {
     #[test]
     fn command_auto_with_failure() {
         let mut cmd = command! {
-            "Example cmd",
-            i32 f32 => |_x, _y| {
+            "Example cmd";
+            :i32, :f32 => |_x, _y| {
                 let err = std::io::Error::new(std::io::ErrorKind::InvalidData, "example error");
                 Err(CriticalError::Critical(err.into()).into())
             }
@@ -215,13 +215,13 @@ mod tests {
 
     #[test]
     fn command_auto_args_info() {
-        let cmd = command!("Example cmd", i32 String f32 => |_x, _s, _y| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd"; :i32, :String, :f32 => |_x, _s, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":String", ":f32"]);
-        let cmd = command!("Example cmd", i32 f32 => |_x, _y| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd"; :i32, :f32 => |_x, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":f32"]);
-        let cmd = command!("Example cmd", f32 => |_x| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd"; :f32 => |_x| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":f32"]);
-        let cmd = command!("Example cmd", => || { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd"; => || { Ok(CommandStatus::Done) });
         let res: &[&str] = &[];
         assert_eq!(cmd.args_info, res);
     }
@@ -229,8 +229,8 @@ mod tests {
     #[test]
     fn command_auto_args_info_with_names() {
         let cmd = command! {
-            "Example cmd",
-            i32:number String : name f32 => |_x, _s, _y| { Ok(CommandStatus::Done) }
+            "Example cmd";
+            number:i32, name : String, :f32 => |_x, _s, _y| { Ok(CommandStatus::Done) }
         };
         assert_eq!(cmd.args_info, &["number:i32", "name:String", ":f32"]);
     }

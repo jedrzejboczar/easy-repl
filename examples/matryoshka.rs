@@ -6,8 +6,8 @@ fn matryoshka(name: String) -> anyhow::Result<Repl<'static>> {
 
     let cloned_prompt = prompt.clone();  // need to move it into closure
     let new = command! {
-        "Enter new repl",
-        String:name => |name: String| {
+        "Enter new repl";
+        name:String => |name: String| {
             let name = cloned_prompt.clone() + &name;
             let mut repl = matryoshka(name)?;
             repl.run()?;
