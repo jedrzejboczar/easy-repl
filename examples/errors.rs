@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use easy_repl::{Repl, CommandStatus, command, critical};
+use easy_repl::{Repl, CommandStatus, Critical, command};
 use anyhow::{self, Context};
 
 // this could be any funcion returining Result with an error implementing Error
@@ -27,15 +27,15 @@ fn main() -> anyhow::Result<()> {
         .add("critical", command! {
             "Command returns a critical error that must be handled outside of REPL";
             text:String => |text| {
-                // Short notation:
-                may_throw(text).map_err(critical)?;
+                // Short notation using the Critical trait
+                may_throw(text).as_critical()?;
                 // More explicitly it could be:
                 //   if let Err(err) = may_throw(text) {
-                //       Err(critical(err))?;
+                //       Err(easy_repl::CriticalError::Critical(err.into()))?;
                 //   }
                 // or even:
                 //   if let Err(err) = may_throw(text) {
-                //       return Err(critical(err)).into();
+                //       return Err(easy_repl::CriticalError::Critical(err.into())).into();
                 //   }
                 Ok(CommandStatus::Done)
             },
@@ -46,7 +46,7 @@ fn main() -> anyhow::Result<()> {
                 let ns = Instant::now().duration_since(start).as_nanos();
                 let cylinder = ns % 6;
                 match cylinder {
-                    0 => may_throw("Bang!".into()).map_err(critical)?,
+                    0 => may_throw("Bang!".into()).as_critical()?,
                     1..=2 => may_throw("Blank cartridge?".into())?,
                     _ => (),
                 }

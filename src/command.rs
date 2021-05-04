@@ -21,6 +21,19 @@ pub enum CriticalError {
     Critical(#[from] anyhow::Error)
 }
 
+pub trait Critical<T, E> {
+    fn as_critical(self) -> Result<T, CriticalError>;
+}
+
+impl<T, E> Critical<T, E> for Result<T, E>
+where
+    E: std::error::Error + Send + Sync + 'static
+{
+    fn as_critical(self) -> Result<T, CriticalError> {
+        self.map_err(|e| CriticalError::Critical(e.into()))
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ArgsError {
     #[error("wrong number of arguments: got {0}, expected {1}")]
