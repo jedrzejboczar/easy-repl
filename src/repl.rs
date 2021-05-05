@@ -37,7 +37,7 @@ pub struct Repl<'a> {
 }
 
 /// State of the REPL after command execution.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LoopStatus {
     /// REPL should continue execution.
     Continue,

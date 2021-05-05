@@ -28,7 +28,7 @@ pub struct Command<'a> {
 }
 
 /// Return status of a command.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CommandStatus {
     /// Indicates that REPL should continue execution
     Done,
