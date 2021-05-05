@@ -1,27 +1,55 @@
 use thiserror;
 use anyhow;
 
-/// Represents a sign
+/// Command handler
+///
+/// It should return the status in case of correct execution. In case of
+/// errors, all the errors will be handled by the REPL, except for
+/// [`CriticalError`], which will be passed up from the REPL.
+pub type Handler<'a> = dyn 'a + FnMut(&[&str]) -> anyhow::Result<CommandStatus>;
+
+/// Called before invoking [`Handler`] to verify that arguments are correct
+pub type Validator<'a> = dyn FnMut(&[&str]) -> Result<(), ArgsError>;
+
+/// Single command that can be called in the REPL
+///
+/// Though it is possible to construct it by manually, it is not advised.
+/// One should rather use the provided [`command!`] macro which will crate
+/// appropriate validator and args_info based on passed specification.
 pub struct Command<'a> {
+    /// Command desctiption that will be displayed in the help message
     pub description: String,
+    /// Names and types of arguments to the command
     pub args_info: Vec<String>,
-    pub handler: Box<dyn 'a + FnMut(&[&str]) -> anyhow::Result<CommandStatus>>,
-    pub validator: Box<dyn FnMut(&[&str]) -> Result<(), ArgsError>>,
+    /// Command handler; arguments passed to it will already have been validated
+    pub handler: Box<Handler<'a>>,
+    /// Callback that will inspect all arguments before invoking the handler
+    pub validator: Box<Validator<'a>>,
 }
 
+/// Return status of a command
 #[derive(Debug)]
 pub enum CommandStatus {
+    /// Indicates that REPL should continue execution
     Done,
+    /// Indicates that REPL should quit
     Quit,
 }
 
+/// Special error wrapper used to indicate that a critical error occured
+///
+/// [`Handler`] can return [`CriticalError`] to indicate that this error
+/// should not be handled by the REPL (which just prints error message
+/// and continues for all other errors).
 #[derive(Debug, thiserror::Error)]
 pub enum CriticalError {
     #[error(transparent)]
     Critical(#[from] anyhow::Error)
 }
 
+/// Extension trait to easily wrap errors in [`CriticalError`]
 pub trait Critical<T, E> {
+    /// Wrap the contained [`Err`] in [`CriticalError`] or leave [`Ok`] untouched
     fn as_critical(self) -> Result<T, CriticalError>;
 }
 
@@ -34,6 +62,7 @@ where
     }
 }
 
+/// Wrong command arguments
 #[derive(Debug, thiserror::Error)]
 pub enum ArgsError {
     #[error("wrong number of arguments: got {0}, expected {1}")]
@@ -43,6 +72,7 @@ pub enum ArgsError {
 }
 
 impl<'a> Command<'a> {
+    /// Validate the arguments and invoke the handler if arguments are correct
     pub fn run(&mut self, args: &[&str]) -> anyhow::Result<CommandStatus> {
         (self.validator)(args)?;
         (self.handler)(args)
@@ -57,9 +87,25 @@ impl<'a> std::fmt::Debug for Command<'a> {
     }
 }
 
-/// Takes a list of types and generates a callable that will take a list
-/// of args and try to parse them into the provided types or return an error.
-/// NOTE: for string arguments use String instead of &str
+// TODO: remove validator and do everything in the handler
+
+/// Generate argument validator based on a list of types (used by [`command!`])
+///
+/// This macro can be used to generate a closure that takes arguments as `&[&str]`
+/// and makes sure that the nubmer of arguments is correct and all can be parsed
+/// to appropriate types. This macro should generally not be used. Prefer to use
+/// [`command!`] which will use this macro appropriately.
+///
+/// Example usage:
+/// ```rust
+/// # use easy_repl::args_validator;
+/// let validator = args_validator!(i32, f32, String);
+/// assert!(validator(&["10", "3.14", "hello"]).is_ok());
+/// ```
+///
+/// # Note
+///
+/// For string arguments use [`String`] instead of [`&str`].
 #[macro_export]
 macro_rules! args_validator {
     ($($type:ty),*) => {
@@ -88,11 +134,46 @@ macro_rules! args_validator {
     (@replace $_old:tt $new:expr) => { $new };
 }
 
-/// Creates a Command based on description, list of argument types and a command handler.
-/// The command handler should be a lambda that will take all the arguments as a single tuple
-/// and return CommandStatus.
-/// Additional glue logic that parses argument strings into concrete types will be added.
-/// Also, an argument validator will be auto-generated based on provided types.
+// Creates a Command based on description, list of argument types and a command handler.
+// The command handler should be a lambda that will take all the arguments as a single tuple
+// and return CommandStatus.
+// Additional glue logic that parses argument strings into concrete types will be added.
+// Also, an argument validator will be auto-generated based on provided types.
+
+/// Generate [`Command`] based on desctiption, list of argument types and a closure used in handler
+///
+/// This macro should be used when creating [`Command`]s. It takes a string description,
+/// a list of argument types with optional names (in the form `name: type`) and a closure.
+/// The closure should have the same number of arguments as provided in the argument list.
+/// The generated command handler will parse all the arguments and call the closure.
+/// The closure used for handler is `move`.
+///
+/// The following command description:
+/// ```rust
+/// command! {
+///     "Example command";
+///     arg1: i32, arg2: String => |arg1, arg2| {
+///         Ok(CommandStatus::Done)
+///     }
+/// }
+/// ```
+///
+/// will roughly be translated into something like:
+/// ```rust
+/// Command {
+///     description: "Example command".into(),
+///     args_info: vec!["arg1:i32".into(), "arg2:String".into()],
+///     validator: Box::new(args_validator!(i32, String)),
+///     handler: Box::new(move |args| -> anyhow::Result<CommandStatus> {
+///         let mut handler = |arg1, arg2| {
+///             Ok(CommandStatus::Done)
+///         };
+///         handler(args[0].parse::<i32>().unwrap(), args[1].parse::<String>().unwrap())
+///     }),
+/// }
+/// ```
+///
+/// Note the `unwrap()` calls. Arguments are assumed to be already validated.
 #[macro_export]
 macro_rules! command {
     ($description:expr; $($( $name:ident )? : $type:ty),* => $handler:expr $(,)?) => {
