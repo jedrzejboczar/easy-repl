@@ -6,25 +6,23 @@ use anyhow;
 /// It should return the status in case of correct execution. In case of
 /// errors, all the errors will be handled by the REPL, except for
 /// [`CriticalError`], which will be passed up from the REPL.
+///
+/// The handler should validate command arguments and can return [`ArgsError`]
+/// to indicate that arguments were wrong.
 pub type Handler<'a> = dyn 'a + FnMut(&[&str]) -> anyhow::Result<CommandStatus>;
-
-/// Called before invoking [`Handler`] to verify that arguments are correct
-pub type Validator<'a> = dyn FnMut(&[&str]) -> Result<(), ArgsError>;
 
 /// Single command that can be called in the REPL
 ///
 /// Though it is possible to construct it by manually, it is not advised.
-/// One should rather use the provided [`command!`] macro which will crate
-/// appropriate validator and args_info based on passed specification.
+/// One should rather use the provided [`command!`] macro which will generate
+/// appropriate arguments validation and args_info based on passed specification.
 pub struct Command<'a> {
     /// Command desctiption that will be displayed in the help message
     pub description: String,
     /// Names and types of arguments to the command
     pub args_info: Vec<String>,
-    /// Command handler; arguments passed to it will already have been validated
+    /// Command handler which should validate arguments and perform command logic
     pub handler: Box<Handler<'a>>,
-    /// Callback that will inspect all arguments before invoking the handler
-    pub validator: Box<Validator<'a>>,
 }
 
 /// Return status of a command
@@ -74,7 +72,6 @@ pub enum ArgsError {
 impl<'a> Command<'a> {
     /// Validate the arguments and invoke the handler if arguments are correct
     pub fn run(&mut self, args: &[&str]) -> anyhow::Result<CommandStatus> {
-        (self.validator)(args)?;
         (self.handler)(args)
     }
 }
@@ -87,8 +84,6 @@ impl<'a> std::fmt::Debug for Command<'a> {
     }
 }
 
-// TODO: remove validator and do everything in the handler
-
 /// Generate argument validator based on a list of types (used by [`command!`])
 ///
 /// This macro can be used to generate a closure that takes arguments as `&[&str]`
@@ -98,8 +93,8 @@ impl<'a> std::fmt::Debug for Command<'a> {
 ///
 /// Example usage:
 /// ```rust
-/// # use easy_repl::args_validator;
-/// let validator = args_validator!(i32, f32, String);
+/// # use easy_repl::validator;
+/// let validator = validator!(i32, f32, String);
 /// assert!(validator(&["10", "3.14", "hello"]).is_ok());
 /// ```
 ///
@@ -107,11 +102,11 @@ impl<'a> std::fmt::Debug for Command<'a> {
 ///
 /// For string arguments use [`String`] instead of [`&str`].
 #[macro_export]
-macro_rules! args_validator {
+macro_rules! validator {
     ($($type:ty),*) => {
         |args: &[&str]| -> std::result::Result<(), $crate::command::ArgsError> {
             // check the number of arguments
-            let n_args: usize = <[()]>::len(&[ $( $crate::args_validator!(@replace $type ()) ),* ]);
+            let n_args: usize = <[()]>::len(&[ $( $crate::validator!(@replace $type ()) ),* ]);
             if args.len() != n_args {
                 return Err($crate::command::ArgsError::WrongNumberOfArguments(args.len(), n_args));
             }
@@ -134,12 +129,7 @@ macro_rules! args_validator {
     (@replace $_old:tt $new:expr) => { $new };
 }
 
-// Creates a Command based on description, list of argument types and a command handler.
-// The command handler should be a lambda that will take all the arguments as a single tuple
-// and return CommandStatus.
-// Additional glue logic that parses argument strings into concrete types will be added.
-// Also, an argument validator will be auto-generated based on provided types.
-
+// TODO: avoid parsing arguments 2 times by generating validation logic in the function
 /// Generate [`Command`] based on desctiption, list of argument types and a closure used in handler
 ///
 /// This macro should be used when creating [`Command`]s. It takes a string description,
@@ -158,13 +148,14 @@ macro_rules! args_validator {
 /// }
 /// ```
 ///
-/// will roughly be translated into something like:
+/// will roughly be translated into something like (code here is slightly simplified):
 /// ```rust
 /// Command {
 ///     description: "Example command".into(),
 ///     args_info: vec!["arg1:i32".into(), "arg2:String".into()],
-///     validator: Box::new(args_validator!(i32, String)),
 ///     handler: Box::new(move |args| -> anyhow::Result<CommandStatus> {
+///         let validator = validator!(i32, String);
+///         validator(args)?
 ///         let mut handler = |arg1, arg2| {
 ///             Ok(CommandStatus::Done)
 ///         };
@@ -172,8 +163,6 @@ macro_rules! args_validator {
 ///     }),
 /// }
 /// ```
-///
-/// Note the `unwrap()` calls. Arguments are assumed to be already validated.
 #[macro_export]
 macro_rules! command {
     ($description:expr; $($( $name:ident )? : $type:ty),* => $handler:expr $(,)?) => {
@@ -182,12 +171,13 @@ macro_rules! command {
             args_info: vec![ $(
                 concat!($(stringify!($name), )? ":", stringify!($type)).into()
             ),* ], // TODO
-            validator: std::boxed::Box::new($crate::args_validator!( $($type),* )),
             handler: command!(@handler $($type)*, $handler),
         }
     };
     (@handler $($type:ty)*, $handler:expr) => {
         Box::new( move |#[allow(unused_variables)] args| -> anyhow::Result<CommandStatus> {
+            let validator = $crate::validator!($($type),*);
+            validator(args)?;
             #[allow(unused_mut)]
             let mut handler = $handler;
             command!(@handler_call handler; args; $($type;)*)
@@ -223,9 +213,6 @@ mod tests {
             handler: Box::new(|_args| {
                 Ok(CommandStatus::Done)
             }),
-            validator: Box::new(|_args| {
-                Ok(())
-            }),
         };
         match (cmd.handler)(&[]) {
             Ok(CommandStatus::Done) => {},
@@ -235,14 +222,14 @@ mod tests {
 
     #[test]
     fn validator_no_args() {
-        let validator = args_validator!();
+        let validator = validator!();
         assert!(validator(&[]).is_ok());
         assert!(validator(&["hello"]).is_err());
     }
 
     #[test]
     fn validator_one_arg() {
-        let validator = args_validator!(i32);
+        let validator = validator!(i32);
         assert!(validator(&[]).is_err());
         assert!(validator(&["hello"]).is_err());
         assert!(validator(&["13"]).is_ok());
@@ -250,7 +237,7 @@ mod tests {
 
     #[test]
     fn validator_multiple_args() {
-        let validator = args_validator!(i32, f32, String);
+        let validator = validator!(i32, f32, String);
         assert!(validator(&[]).is_err());
         assert!(validator(&["1", "2.1", "hello"]).is_ok());
         assert!(validator(&["1.2", "2.1", "hello"]).is_err());

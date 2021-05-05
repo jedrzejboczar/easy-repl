@@ -1,4 +1,4 @@
-use easy_repl::{Repl, CommandStatus, command, args_validator};
+use easy_repl::{Repl, CommandStatus, command, validator};
 use anyhow::{self, Context};
 
 fn main() -> anyhow::Result<()> {
@@ -34,17 +34,18 @@ fn main() -> anyhow::Result<()> {
                 Ok(CommandStatus::Done)
             },
         })
-        // this shows how to create Command manually with the help of args_validator macro
-        // one could also implement validator manually
+        // this shows how to create Command manually with the help of the validator! macro
+        // one could also implement arguments validation manually
         .add("outy", easy_repl::Command {
             description: "Use mutably outside var y".into(),
             args_info: vec!["appended".into()],
             handler: Box::new(|args| {
+                let validator = validator!(i32);
+                validator(args)?;
                 outside_y += args[0];
                 println!("{}", outside_y);
                 Ok(CommandStatus::Done)
             }),
-            validator: Box::new(args_validator!(String)),
         })
         .build().context("Failed to create repl")?;
 
