@@ -3,19 +3,17 @@
 use std::{collections::HashMap, io::Write, rc::Rc};
 
 use rustyline::{self, completion::FilenameCompleter, error::ReadlineError};
+use shell_words;
 use textwrap;
 use thiserror;
 use trie_rs::{Trie, TrieBuilder};
-use shell_words;
 
-use crate::command::{Command, CommandStatus, CriticalError, ArgsError};
-use crate::completion::{Completion, completion_candidates};
+use crate::command::{ArgsError, Command, CommandStatus, CriticalError};
+use crate::completion::{completion_candidates, Completion};
 
 /// Reserved command names. These commands are always added to REPL.
-pub const RESERVED: &'static [(&'static str, &'static str)] = &[
-    ("help", "Show this help message"),
-    ("quit", "Quit repl"),
-];
+pub const RESERVED: &'static [(&'static str, &'static str)] =
+    &[("help", "Show this help message"), ("quit", "Quit repl")];
 
 /// Read-eval-print loop.
 ///
@@ -98,7 +96,7 @@ impl<'a> Default for ReplBuilder<'a> {
             commands: Default::default(),
             out: Box::new(std::io::stderr()),
             editor_config: rustyline::config::Config::builder()
-                .output_stream(rustyline::OutputStreamType::Stderr)  // NOTE: cannot specify `out`
+                .output_stream(rustyline::OutputStreamType::Stderr) // NOTE: cannot specify `out`
                 .completion_type(rustyline::CompletionType::List)
                 .build(),
             with_hints: true,
@@ -180,8 +178,7 @@ impl<'a> ReplBuilder<'a> {
         let mut trie = TrieBuilder::new();
         for (name, cmd) in self.commands.into_iter() {
             let old = commands.insert(name.clone(), cmd);
-            let args = split_args(&name)
-                .map_err(|_e| BuilderError::InvalidName(name.clone()))?;
+            let args = split_args(&name).map_err(|_e| BuilderError::InvalidName(name.clone()))?;
             if args.len() != 1 || name.is_empty() {
                 return Err(BuilderError::InvalidName(name));
             } else if RESERVED.iter().find(|&&(n, _)| n == name).is_some() {
@@ -206,10 +203,12 @@ impl<'a> ReplBuilder<'a> {
                 None
             },
         };
-        let mut editor = rustyline::Editor::with_config(rustyline::config::Config::builder()
-            .output_stream(rustyline::OutputStreamType::Stderr)  // NOTE: cannot specify `out`
-            .completion_type(rustyline::CompletionType::List)
-            .build());
+        let mut editor = rustyline::Editor::with_config(
+            rustyline::config::Config::builder()
+                .output_stream(rustyline::OutputStreamType::Stderr) // NOTE: cannot specify `out`
+                .completion_type(rustyline::CompletionType::List)
+                .build(),
+        );
         editor.set_helper(Some(helper));
 
         Ok(Repl {
@@ -235,11 +234,14 @@ impl<'a> Repl<'a> {
         if entries.is_empty() {
             return "".into();
         }
-        let width = entries.iter()
+        let width = entries
+            .iter()
             .map(|(sig, _)| sig)
             .max_by_key(|sig| sig.len())
-            .unwrap().len();
-        entries.iter()
+            .unwrap()
+            .len();
+        entries
+            .iter()
             .map(|(sig, desc)| {
                 let indent = " ".repeat(width + 2 + 2);
                 let opts = textwrap::Options::new(self.text_width)
@@ -252,7 +254,8 @@ impl<'a> Repl<'a> {
                 out.push_str("\n");
                 out.push_str(&next);
                 out
-            }).unwrap()
+            })
+            .unwrap()
     }
 
     /// Returns formatted help message.
@@ -260,14 +263,25 @@ impl<'a> Repl<'a> {
         let mut names: Vec<_> = self.commands.keys().collect();
         names.sort();
 
-        let signature = |name: &String| format!("{} {}", name, self.commands[name].args_info.join(" "));
-        let user: Vec<_> = names.iter()
-            .map(|name| (signature(name), self.commands[name.as_str()].description.clone()))
+        let signature =
+            |name: &String| format!("{} {}", name, self.commands[name].args_info.join(" "));
+        let user: Vec<_> = names
+            .iter()
+            .map(|name| {
+                (
+                    signature(name),
+                    self.commands[name.as_str()].description.clone(),
+                )
+            })
             .collect();
 
-        let other: Vec<_> = RESERVED.iter().map(|(name, desc)| (name.to_string(), desc.to_string())).collect();
+        let other: Vec<_> = RESERVED
+            .iter()
+            .map(|(name, desc)| (name.to_string(), desc.to_string()))
+            .collect();
 
-        let msg = format!(r#"
+        let msg = format!(
+            r#"
 {}
 
 Available commands:
@@ -275,17 +289,21 @@ Available commands:
 
 Other commands:
 {}
-        "#, self.description, self.format_help_entries(&user), self.format_help_entries(&other));
+        "#,
+            self.description,
+            self.format_help_entries(&user),
+            self.format_help_entries(&other)
+        );
         msg.trim().into()
     }
 
     fn handle_line(&mut self, line: String) -> anyhow::Result<LoopStatus> {
         // if there is any parsing error just continue to next input
-        let args = match split_args(&line)  {
+        let args = match split_args(&line) {
             Err(err) => {
                 writeln!(&mut self.out, "Error: {}", err)?;
                 return Ok(LoopStatus::Continue);
-            },
+            }
             Ok(args) => args,
         };
         let prefix = &args[0];
@@ -305,9 +323,7 @@ Other commands:
             match self.handle_command(name, &tail) {
                 Ok(CommandStatus::Done) => Ok(LoopStatus::Continue),
                 Ok(CommandStatus::Quit) => Ok(LoopStatus::Break),
-                Err(err) if err.downcast_ref::<CriticalError>().is_some()  => {
-                    Err(err)
-                },
+                Err(err) if err.downcast_ref::<CriticalError>().is_some() => Err(err),
                 Err(err) => {
                     // other errors are handler here
                     writeln!(&mut self.out, "Error: {}", err)?;
@@ -332,19 +348,17 @@ Other commands:
                 } else {
                     Ok(LoopStatus::Continue)
                 }
-            },
+            }
             Err(ReadlineError::Interrupted) => {
                 writeln!(&mut self.out, "CTRL-C")?;
                 Ok(LoopStatus::Break)
-            },
-            Err(ReadlineError::Eof) => {
-                Ok(LoopStatus::Break)
-            },
+            }
+            Err(ReadlineError::Eof) => Ok(LoopStatus::Break),
             // TODO: not sure if these should be propagated or handler here
             Err(err) => {
                 writeln!(&mut self.out, "Error: {:?}", err)?;
                 Ok(LoopStatus::Continue)
-            },
+            }
         }
     }
 
@@ -354,7 +368,7 @@ Other commands:
                 let help = self.help();
                 writeln!(&mut self.out, "{}", help)?;
                 Ok(CommandStatus::Done)
-            },
+            }
             "quit" => Ok(CommandStatus::Quit),
             _ => {
                 // find_command must have returned correct name
@@ -396,7 +410,10 @@ mod tests {
     #[test]
     fn builder_spaces() {
         let result = Repl::builder()
-            .add("name-with spaces", command!(""; => || Ok(CommandStatus::Done)))
+            .add(
+                "name-with spaces",
+                command!(""; => || Ok(CommandStatus::Done)),
+            )
             .build();
         assert!(matches!(result, Err(BuilderError::InvalidName(_))));
     }
@@ -416,12 +433,20 @@ mod tests {
     #[test]
     fn repl_quits() {
         let mut repl = Repl::builder()
-            .add("foo", command!("description"; => || Ok(CommandStatus::Done)))
-            .build().unwrap();
+            .add(
+                "foo",
+                command!("description"; => || Ok(CommandStatus::Done)),
+            )
+            .build()
+            .unwrap();
         assert_eq!(repl.handle_line("quit".into()).unwrap(), LoopStatus::Break);
         let mut repl = Repl::builder()
-            .add("foo", command!("description"; => || Ok(CommandStatus::Quit)))
-            .build().unwrap();
+            .add(
+                "foo",
+                command!("description"; => || Ok(CommandStatus::Quit)),
+            )
+            .build()
+            .unwrap();
         assert_eq!(repl.handle_line("foo".into()).unwrap(), LoopStatus::Break);
     }
 }

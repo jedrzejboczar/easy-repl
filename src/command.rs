@@ -1,7 +1,7 @@
 //! Implementation of [`Command`]s with utilities that help to crate them.
 
-use thiserror;
 use anyhow;
+use thiserror;
 
 /// Command handler.
 ///
@@ -47,7 +47,7 @@ pub enum CommandStatus {
 pub enum CriticalError {
     /// The contained error is critical and should be returned back from REPL.
     #[error(transparent)]
-    Critical(#[from] anyhow::Error)
+    Critical(#[from] anyhow::Error),
 }
 
 /// Extension trait to easily wrap errors in [`CriticalError`].
@@ -70,7 +70,7 @@ pub trait Critical<T, E> {
 
 impl<T, E> Critical<T, E> for Result<T, E>
 where
-    E: std::error::Error + Send + Sync + 'static
+    E: std::error::Error + Send + Sync + 'static,
 {
     fn as_critical(self) -> Result<T, CriticalError> {
         self.map_err(|e| CriticalError::Critical(e.into()))
@@ -82,9 +82,13 @@ where
 #[derive(Debug, thiserror::Error)]
 pub enum ArgsError {
     #[error("wrong number of arguments: got {got}, expected {expected}")]
-    WrongNumberOfArguments{ got: usize, expected: usize },
+    WrongNumberOfArguments { got: usize, expected: usize },
     #[error("failed to parse argument value '{argument}': {error}")]
-    WrongArgumentValue{ argument: String, #[source] error: anyhow::Error },
+    WrongArgumentValue {
+        argument: String,
+        #[source]
+        error: anyhow::Error,
+    },
 }
 
 impl<'a> Command<'a> {
@@ -237,13 +241,11 @@ mod tests {
         let mut cmd = Command {
             description: "Test command".into(),
             args_info: vec![],
-            handler: Box::new(|_args| {
-                Ok(CommandStatus::Done)
-            }),
+            handler: Box::new(|_args| Ok(CommandStatus::Done)),
         };
         match (cmd.handler)(&[]) {
-            Ok(CommandStatus::Done) => {},
-            _ => panic!("Wrong variant")
+            Ok(CommandStatus::Done) => {}
+            _ => panic!("Wrong variant"),
         };
     }
 
@@ -281,7 +283,7 @@ mod tests {
             }
         };
         match cmd.run(&[]) {
-            Ok(CommandStatus::Done) => {},
+            Ok(CommandStatus::Done) => {}
             Ok(v) => panic!("Wrong variant: {:?}", v),
             Err(e) => panic!("Error: {:?}", e),
         };
@@ -296,7 +298,7 @@ mod tests {
             }
         };
         match cmd.run(&["13", "1.1"]) {
-            Ok(CommandStatus::Done) => {},
+            Ok(CommandStatus::Done) => {}
             Ok(v) => panic!("Wrong variant: {:?}", v),
             Err(e) => panic!("Error: {:?}", e),
         };
@@ -317,7 +319,7 @@ mod tests {
                 if e.downcast_ref::<CriticalError>().is_none() {
                     panic!("Wrong error: {:?}", e)
                 }
-            },
+            }
         };
     }
 

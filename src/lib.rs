@@ -94,8 +94,8 @@
 //! The REPL also by default automatically implements command hints and TAB-completion (see [`rustyline::hint`], [`rustyline::completion`]).
 
 pub mod command;
-pub mod repl;
 mod completion;
+pub mod repl;
 
+pub use command::{Command, CommandStatus, Critical, CriticalError};
 pub use repl::Repl;
-pub use command::{Command, CommandStatus, CriticalError, Critical};

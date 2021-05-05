@@ -1,6 +1,9 @@
 use std::rc::Rc;
 
-use rustyline::{completion::{Completer, FilenameCompleter, Pair}, hint::Hinter};
+use rustyline::{
+    completion::{Completer, FilenameCompleter, Pair},
+    hint::Hinter,
+};
 use rustyline_derive::{Helper, Highlighter, Validator};
 use trie_rs::Trie;
 
@@ -71,7 +74,10 @@ impl Completion {
         let completions = if on_first {
             let candidates = completion_candidates(&self.trie, &args[0])
                 .into_iter()
-                .map(|c| Pair { display: c.clone(), replacement: c })
+                .map(|c| Pair {
+                    display: c.clone(),
+                    replacement: c,
+                })
                 .collect();
             Some((whitespace_before(line), candidates))
         } else {
@@ -85,7 +91,8 @@ pub(crate) fn completion_candidates(trie: &Trie<u8>, prefix: &str) -> Vec<String
     if prefix.is_empty() {
         Vec::with_capacity(0)
     } else {
-        trie.predictive_search(prefix).into_iter()
+        trie.predictive_search(prefix)
+            .into_iter()
             .map(|bytes| String::from_utf8(bytes).unwrap())
             .collect()
     }
