@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn command_auto_with_failure() {
+    fn command_auto_with_critical() {
         let mut cmd = command! {
             "Example cmd";
             :i32, :f32 => |_x, _y| {
@@ -314,7 +314,7 @@ mod tests {
         match cmd.run(&["13", "1.1"]) {
             Ok(v) => panic!("Wrong variant: {:?}", v),
             Err(e) => {
-                if e.downcast_ref::<CriticalError>().is_some() {
+                if e.downcast_ref::<CriticalError>().is_none() {
                     panic!("Wrong error: {:?}", e)
                 }
             },
