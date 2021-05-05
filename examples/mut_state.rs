@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
         .text_width(60 as usize)
         .add("count", command! {
             "Count from X to Y";
-            X:i32, Y:i32 => |x, y| {
+            (X:i32, Y:i32) => |x, y| {
                 for i in x..=y {
                     print!(" {}", i);
                 }
@@ -21,14 +21,14 @@ fn main() -> anyhow::Result<()> {
         })
         .add("say", command! {
             "Say X";
-            :f32 => |x| {
+            (:f32) => |x| {
                 println!("x is equal to {}", x);
                 Ok(CommandStatus::Done)
             },
         })
         .add("outx", command! {
             "Use mutably outside var x. This command has a really long description so we need to wrap it somehow, it is interesting how actually the wrapping will be performed.";
-            => || {
+            () => || {
                 outside_x += "x";
                 println!("{}", outside_x);
                 Ok(CommandStatus::Done)
