@@ -3,17 +3,17 @@ use anyhow::{self, Context};
 
 fn main() -> anyhow::Result<()> {
     let mut repl = Repl::builder()
-        .add("add", command! {
-            "Count from X to Y";
-            X:i32, Y:i32 => |x, y| {
-                println!("{} + {} = {}", x, y, x + y);
+        .add("hello", command! {
+            "Say hello";
+            name: String => |name| {
+                println!("Hello {}!", name);
                 Ok(CommandStatus::Done)
             }
         })
-        .add("mul", command! {
-            "Count from X to Y";
+        .add("add", command! {
+            "Add X to Y";
             X:i32, Y:i32 => |x, y| {
-                println!("{} * {} = {}", x, y, x * y);
+                println!("{} + {} = {}", x, y, x + y);
                 Ok(CommandStatus::Done)
             }
         })

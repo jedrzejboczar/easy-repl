@@ -1,7 +1,9 @@
+//! Implementation of [`Command`]s with utilities that help to crate them.
+
 use thiserror;
 use anyhow;
 
-/// Command handler
+/// Command handler.
 ///
 /// It should return the status in case of correct execution. In case of
 /// errors, all the errors will be handled by the REPL, except for
@@ -11,7 +13,7 @@ use anyhow;
 /// to indicate that arguments were wrong.
 pub type Handler<'a> = dyn 'a + FnMut(&[&str]) -> anyhow::Result<CommandStatus>;
 
-/// Single command that can be called in the REPL
+/// Single command that can be called in the REPL.
 ///
 /// Though it is possible to construct it by manually, it is not advised.
 /// One should rather use the provided [`command!`] macro which will generate
@@ -25,7 +27,7 @@ pub struct Command<'a> {
     pub handler: Box<Handler<'a>>,
 }
 
-/// Return status of a command
+/// Return status of a command.
 #[derive(Debug)]
 pub enum CommandStatus {
     /// Indicates that REPL should continue execution
@@ -34,18 +36,33 @@ pub enum CommandStatus {
     Quit,
 }
 
-/// Special error wrapper used to indicate that a critical error occured
+/// Special error wrapper used to indicate that a critical error occured.
 ///
 /// [`Handler`] can return [`CriticalError`] to indicate that this error
 /// should not be handled by the REPL (which just prints error message
 /// and continues for all other errors).
+///
+/// This is most conveniently used via the [`Critical`] extension trait.
 #[derive(Debug, thiserror::Error)]
 pub enum CriticalError {
+    /// The contained error is critical and should be returned back from REPL.
     #[error(transparent)]
     Critical(#[from] anyhow::Error)
 }
 
-/// Extension trait to easily wrap errors in [`CriticalError`]
+/// Extension trait to easily wrap errors in [`CriticalError`].
+///
+/// This is implemented for [`std::result::Result`] so can be used to coveniently
+/// wrap errors that implement [`std::error::Error`] to indicate that they are
+/// critical and should be returned by the REPL, for example:
+/// ```rust
+/// # use easy_repl::{CriticalError, Critical};
+/// let result: Result<(), std::fmt::Error> = Err(std::fmt::Error);
+/// let critical = result.as_critical();
+/// assert!(matches!(critical, Err(CriticalError::Critical(_))));
+/// ```
+///
+/// See `examples/errors.rs` for a concrete usage example.
 pub trait Critical<T, E> {
     /// Wrap the contained [`Err`] in [`CriticalError`] or leave [`Ok`] untouched
     fn as_critical(self) -> Result<T, CriticalError>;
@@ -60,17 +77,18 @@ where
     }
 }
 
-/// Wrong command arguments
+/// Wrong command arguments.
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum ArgsError {
-    #[error("wrong number of arguments: got {0}, expected {1}")]
-    WrongNumberOfArguments(usize, usize),
-    #[error("failed to parse argument value '{0}'")]
-    WrongArgumentValue(String, #[source] anyhow::Error),
+    #[error("wrong number of arguments: got {got}, expected {expected}")]
+    WrongNumberOfArguments{ got: usize, expected: usize },
+    #[error("failed to parse argument value '{argument}': {error}")]
+    WrongArgumentValue{ argument: String, #[source] error: anyhow::Error },
 }
 
 impl<'a> Command<'a> {
-    /// Validate the arguments and invoke the handler if arguments are correct
+    /// Validate the arguments and invoke the handler if arguments are correct.
     pub fn run(&mut self, args: &[&str]) -> anyhow::Result<CommandStatus> {
         (self.handler)(args)
     }
@@ -84,7 +102,7 @@ impl<'a> std::fmt::Debug for Command<'a> {
     }
 }
 
-/// Generate argument validator based on a list of types (used by [`command!`])
+/// Generate argument validator based on a list of types (used by [`command!`]).
 ///
 /// This macro can be used to generate a closure that takes arguments as `&[&str]`
 /// and makes sure that the nubmer of arguments is correct and all can be parsed
@@ -108,7 +126,10 @@ macro_rules! validator {
             // check the number of arguments
             let n_args: usize = <[()]>::len(&[ $( $crate::validator!(@replace $type ()) ),* ]);
             if args.len() != n_args {
-                return Err($crate::command::ArgsError::WrongNumberOfArguments(args.len(), n_args));
+                return Err($crate::command::ArgsError::WrongNumberOfArguments {
+                    got: args.len(),
+                    expected: n_args,
+            });
             }
             #[allow(unused_variables, unused_mut)]
             let mut i = 0;
@@ -116,7 +137,10 @@ macro_rules! validator {
             {
                 $(
                     if let Err(err) = args[i].parse::<$type>() {
-                        return Err($crate::command::ArgsError::WrongArgumentValue(args[i].into(), err.into()));
+                        return Err($crate::command::ArgsError::WrongArgumentValue {
+                            argument: args[i].into(),
+                            error: err.into()
+                    });
                     }
                     i += 1;
                 )*
@@ -130,7 +154,7 @@ macro_rules! validator {
 }
 
 // TODO: avoid parsing arguments 2 times by generating validation logic in the function
-/// Generate [`Command`] based on desctiption, list of argument types and a closure used in handler
+/// Generate [`Command`] based on desctiption, list of arg types and a closure used in handler.
 ///
 /// This macro should be used when creating [`Command`]s. It takes a string description,
 /// a list of argument types with optional names (in the form `name: type`) and a closure.
@@ -140,28 +164,31 @@ macro_rules! validator {
 ///
 /// The following command description:
 /// ```rust
-/// command! {
+/// # use easy_repl::{CommandStatus, command};
+/// let cmd = command! {
 ///     "Example command";
 ///     arg1: i32, arg2: String => |arg1, arg2| {
 ///         Ok(CommandStatus::Done)
 ///     }
-/// }
+/// };
 /// ```
 ///
 /// will roughly be translated into something like (code here is slightly simplified):
 /// ```rust
-/// Command {
+/// # use anyhow;
+/// # use easy_repl::{Command, CommandStatus, command, validator};
+/// let cmd = Command {
 ///     description: "Example command".into(),
 ///     args_info: vec!["arg1:i32".into(), "arg2:String".into()],
 ///     handler: Box::new(move |args| -> anyhow::Result<CommandStatus> {
 ///         let validator = validator!(i32, String);
-///         validator(args)?
+///         validator(args)?;
 ///         let mut handler = |arg1, arg2| {
 ///             Ok(CommandStatus::Done)
 ///         };
 ///         handler(args[0].parse::<i32>().unwrap(), args[1].parse::<String>().unwrap())
 ///     }),
-/// }
+/// };
 /// ```
 #[macro_export]
 macro_rules! command {
