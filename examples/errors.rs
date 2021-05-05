@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
             "Command returns a critical error that must be handled outside of REPL";
             text:String => |text| {
                 // Short notation using the Critical trait
-                may_throw(text).as_critical()?;
+                may_throw(text).into_critical()?;
                 // More explicitly it could be:
                 //   if let Err(err) = may_throw(text) {
                 //       Err(easy_repl::CriticalError::Critical(err.into()))?;
@@ -46,7 +46,7 @@ fn main() -> anyhow::Result<()> {
                 let ns = Instant::now().duration_since(start).as_nanos();
                 let cylinder = ns % 6;
                 match cylinder {
-                    0 => may_throw("Bang!".into()).as_critical()?,
+                    0 => may_throw("Bang!".into()).into_critical()?,
                     1..=2 => may_throw("Blank cartridge?".into())?,
                     _ => (),
                 }

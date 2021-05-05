@@ -58,21 +58,21 @@ pub enum CriticalError {
 /// ```rust
 /// # use easy_repl::{CriticalError, Critical};
 /// let result: Result<(), std::fmt::Error> = Err(std::fmt::Error);
-/// let critical = result.as_critical();
+/// let critical = result.into_critical();
 /// assert!(matches!(critical, Err(CriticalError::Critical(_))));
 /// ```
 ///
 /// See `examples/errors.rs` for a concrete usage example.
 pub trait Critical<T, E> {
     /// Wrap the contained [`Err`] in [`CriticalError`] or leave [`Ok`] untouched
-    fn as_critical(self) -> Result<T, CriticalError>;
+    fn into_critical(self) -> Result<T, CriticalError>;
 }
 
 impl<T, E> Critical<T, E> for Result<T, E>
 where
     E: std::error::Error + Send + Sync + 'static,
 {
-    fn as_critical(self) -> Result<T, CriticalError> {
+    fn into_critical(self) -> Result<T, CriticalError> {
         self.map_err(|e| CriticalError::Critical(e.into()))
     }
 }
