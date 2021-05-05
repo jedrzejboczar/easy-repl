@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 
-//! An easy to use REPL. Ideal when there is a need to crate an ad-hoc shell.
+//! An easy to use REPL, ideal when there is a need to crate an ad-hoc shell.
 //!
 //! This library provides a fast and convenient way to generate a
 //! [REPL](https://en.wikipedia.org/wiki/Read%E2%80%93eval%E2%80%93print_loop)
