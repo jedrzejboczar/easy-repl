@@ -170,7 +170,7 @@ macro_rules! validator {
 /// ```rust
 /// # use easy_repl::{CommandStatus, command};
 /// let cmd = command! {
-///     "Example command";
+///     "Example command",
 ///     (arg1: i32, arg2: String) => |arg1, arg2| {
 ///         Ok(CommandStatus::Done)
 ///     }
@@ -196,7 +196,7 @@ macro_rules! validator {
 /// ```
 #[macro_export]
 macro_rules! command {
-    ($description:expr; ( $($( $name:ident )? : $type:ty),* ) => $handler:expr $(,)?) => {
+    ($description:expr, ( $($( $name:ident )? : $type:ty),* ) => $handler:expr $(,)?) => {
         $crate::command::Command {
             description: $description.into(),
             args_info: vec![ $(
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn command_auto_no_args() {
         let mut cmd = command! {
-            "Example cmd";
+            "Example cmd",
             () => || {
                 Ok(CommandStatus::Done)
             }
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn command_auto_with_args() {
         let mut cmd = command! {
-            "Example cmd";
+            "Example cmd",
             (:i32, :f32) => |_x, _y| {
                 Ok(CommandStatus::Done)
             }
@@ -307,7 +307,7 @@ mod tests {
     #[test]
     fn command_auto_with_critical() {
         let mut cmd = command! {
-            "Example cmd";
+            "Example cmd",
             (:i32, :f32) => |_x, _y| {
                 let err = std::io::Error::new(std::io::ErrorKind::InvalidData, "example error");
                 Err(CriticalError::Critical(err.into()).into())
@@ -325,13 +325,13 @@ mod tests {
 
     #[test]
     fn command_auto_args_info() {
-        let cmd = command!("Example cmd"; (:i32, :String, :f32) => |_x, _s, _y| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", (:i32, :String, :f32) => |_x, _s, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":String", ":f32"]);
-        let cmd = command!("Example cmd"; (:i32, :f32) => |_x, _y| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", (:i32, :f32) => |_x, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":f32"]);
-        let cmd = command!("Example cmd"; (:f32) => |_x| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", (:f32) => |_x| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":f32"]);
-        let cmd = command!("Example cmd"; () => || { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", () => || { Ok(CommandStatus::Done) });
         let res: &[&str] = &[];
         assert_eq!(cmd.args_info, res);
     }
@@ -339,7 +339,7 @@ mod tests {
     #[test]
     fn command_auto_args_info_with_names() {
         let cmd = command! {
-            "Example cmd";
+            "Example cmd",
             (number:i32, name : String, :f32) => |_x, _s, _y| Ok(CommandStatus::Done)
         };
         assert_eq!(cmd.args_info, &["number:i32", "name:String", ":f32"]);

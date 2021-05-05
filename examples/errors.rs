@@ -14,18 +14,18 @@ fn main() -> anyhow::Result<()> {
 
     let mut repl = Repl::builder()
         .add("ok", command! {
-            "Run a command that just succeeds";
+            "Run a command that just succeeds",
             () => || Ok(CommandStatus::Done)
         })
         .add("error", command! {
-            "Command with recoverable error handled by the REPL";
+            "Command with recoverable error handled by the REPL",
             (text:String) => |text| {
                 may_throw(text)?;
                 Ok(CommandStatus::Done)
             },
         })
         .add("critical", command! {
-            "Command returns a critical error that must be handled outside of REPL";
+            "Command returns a critical error that must be handled outside of REPL",
             (text:String) => |text| {
                 // Short notation using the Critical trait
                 may_throw(text).into_critical()?;
@@ -41,7 +41,7 @@ fn main() -> anyhow::Result<()> {
             },
         })
         .add("roulette", command! {
-            "Feeling lucky?";
+            "Feeling lucky?",
             () => || {
                 let ns = Instant::now().duration_since(start).as_nanos();
                 let cylinder = ns % 6;

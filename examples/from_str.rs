@@ -7,7 +7,7 @@ use anyhow::{self, Context};
 fn main() -> anyhow::Result<()> {
     let mut repl = Repl::builder()
         .add("ls", command! {
-            "List files in a directory";
+            "List files in a directory",
             (dir: PathBuf) => |dir: PathBuf| {
                 for entry in dir.read_dir()? {
                     println!("{}", entry?.path().to_string_lossy());
@@ -16,7 +16,7 @@ fn main() -> anyhow::Result<()> {
             }
         })
         .add("ipaddr", command! {
-            "Just parse and print the given IP address";
+            "Just parse and print the given IP address",
             (ip: IpAddr) => |ip: IpAddr| {
                 println!("{}", ip);
                 Ok(CommandStatus::Done)
