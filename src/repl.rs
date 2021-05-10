@@ -203,12 +203,7 @@ impl<'a> ReplBuilder<'a> {
                 None
             },
         };
-        let mut editor = rustyline::Editor::with_config(
-            rustyline::config::Config::builder()
-                .output_stream(rustyline::OutputStreamType::Stderr) // NOTE: cannot specify `out`
-                .completion_type(rustyline::CompletionType::List)
-                .build(),
-        );
+        let mut editor = rustyline::Editor::with_config(self.editor_config);
         editor.set_helper(Some(helper));
 
         Ok(Repl {
