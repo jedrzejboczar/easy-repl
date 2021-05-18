@@ -1,4 +1,4 @@
-# easy-repl
+# easy-repl [![crates.io](https://img.shields.io/crates/v/easy-repl.svg)](https://crates.io/crates/easy-repl) [![docs.rs](https://docs.rs/easy-repl/badge.svg)](https://docs.rs/easy-repl)
 
 An easy to use REPL, ideal when there is a need to crate an ad-hoc shell.
 
