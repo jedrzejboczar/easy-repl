@@ -11,20 +11,20 @@ use thiserror;
 ///
 /// The handler should validate command arguments and can return [`ArgsError`]
 /// to indicate that arguments were wrong.
-pub type Handler<'a> = dyn 'a + FnMut(&[&str]) -> anyhow::Result<CommandStatus>;
+pub type Handler<'a, Context> = dyn 'a + FnMut(&Context, &[&str]) -> anyhow::Result<CommandStatus>;
 
 /// Single command that can be called in the REPL.
 ///
 /// Though it is possible to construct it by manually, it is not advised.
 /// One should rather use the provided [`command!`] macro which will generate
 /// appropriate arguments validation and args_info based on passed specification.
-pub struct Command<'a> {
+pub struct Command<'a, Context = ()> {
     /// Command desctiption that will be displayed in the help message
     pub description: String,
     /// Names and types of arguments to the command
     pub args_info: Vec<String>,
     /// Command handler which should validate arguments and perform command logic
-    pub handler: Box<Handler<'a>>,
+    pub handler: Box<Handler<'a, Context>>,
 }
 
 /// Return status of a command.
@@ -91,10 +91,10 @@ pub enum ArgsError {
     },
 }
 
-impl<'a> Command<'a> {
+impl<'a, Context> Command<'a, Context> {
     /// Validate the arguments and invoke the handler if arguments are correct.
-    pub fn run(&mut self, args: &[&str]) -> anyhow::Result<CommandStatus> {
-        (self.handler)(args)
+    pub fn run(&mut self, ctx: &Context, args: &[&str]) -> anyhow::Result<CommandStatus> {
+        (self.handler)(ctx, args)
     }
 }
 
@@ -171,7 +171,7 @@ macro_rules! validator {
 /// # use easy_repl::{CommandStatus, command};
 /// let cmd = command! {
 ///     "Example command",
-///     (arg1: i32, arg2: String) => |arg1, arg2| {
+///     (arg1: i32, arg2: String) => |_ctx: &(), arg1, arg2| {
 ///         Ok(CommandStatus::Done)
 ///     }
 /// };
@@ -184,7 +184,7 @@ macro_rules! validator {
 /// let cmd = Command {
 ///     description: "Example command".into(),
 ///     args_info: vec!["arg1:i32".into(), "arg2:String".into()],
-///     handler: Box::new(move |args| -> anyhow::Result<CommandStatus> {
+///     handler: Box::new(move |_ctx: &(), args| -> anyhow::Result<CommandStatus> {
 ///         let validator = validator!(i32, String);
 ///         validator(args)?;
 ///         let mut handler = |arg1, arg2| {
@@ -194,6 +194,9 @@ macro_rules! validator {
 ///     }),
 /// };
 /// ```
+///
+/// The context is what is set in the Repl, and will be passed as a reference here.
+/// If not enabled, use a `_: &()` since it is by default a unit type.
 #[macro_export]
 macro_rules! command {
     ($description:expr, ( $($( $name:ident )? : $type:ty),* ) => $handler:expr $(,)?) => {
@@ -206,29 +209,29 @@ macro_rules! command {
         }
     };
     (@handler $($type:ty)*, $handler:expr) => {
-        Box::new( move |#[allow(unused_variables)] args| -> anyhow::Result<CommandStatus> {
+        Box::new( move |#[allow(unused_variables)] ctx, args| -> anyhow::Result<CommandStatus> {
             let validator = $crate::validator!($($type),*);
             validator(args)?;
             #[allow(unused_mut)]
             let mut handler = $handler;
-            command!(@handler_call handler; args; $($type;)*)
+            command!(@handler_call ctx; handler; args; $($type;)*)
         })
     };
     // transform element of $args into parsed function argument by calling .parse::<$type>().unwrap()
     // on each, this starts a recursive muncher that constructs following argument getters args[i]
-    (@handler_call $handler:ident; $args:ident; $($types:ty;)*) => {
-        command!(@handler_call $handler, $args, 0; $($types;)* =>)
+    (@handler_call $ctx:ident; $handler:ident; $args:ident; $($types:ty;)*) => {
+        command!(@handler_call $ctx, $handler, $args, 0; $($types;)* =>)
     };
     // $num is used to index $args; pop $type from beginning of list, add new parsed at the endo of $parsed
-    (@handler_call $handler:ident, $args:ident, $num:expr; $type:ty; $($types:ty;)* => $($parsed:expr;)*) => {
-        command!(@handler_call $handler, $args, $num + 1;
+    (@handler_call $ctx:ident, $handler:ident, $args:ident, $num:expr; $type:ty; $($types:ty;)* => $($parsed:expr;)*) => {
+        command!(@handler_call $ctx, $handler, $args, $num + 1;
             $($types;)* =>
             $($parsed;)* $args[$num].parse::<$type>().unwrap();
         )
     };
     // finally when there are no more types emit code that calls the handler with all arguments parsed
-    (@handler_call $handler:ident, $args:ident, $num:expr; => $($parsed:expr;)*) => {
-        $handler( $($parsed),* )
+    (@handler_call $ctx:ident, $handler:ident, $args:ident, $num:expr; => $($parsed:expr;)*) => {
+        $handler($ctx, $($parsed),* )
     };
 }
 
@@ -241,9 +244,9 @@ mod tests {
         let mut cmd = Command {
             description: "Test command".into(),
             args_info: vec![],
-            handler: Box::new(|_args| Ok(CommandStatus::Done)),
+            handler: Box::new(|_, _args| Ok(CommandStatus::Done)),
         };
-        match (cmd.handler)(&[]) {
+        match (cmd.handler)(&(), &[]) {
             Ok(CommandStatus::Done) => {}
             _ => panic!("Wrong variant"),
         };
@@ -278,11 +281,11 @@ mod tests {
     fn command_auto_no_args() {
         let mut cmd = command! {
             "Example cmd",
-            () => || {
+            () => |_| {
                 Ok(CommandStatus::Done)
             }
         };
-        match cmd.run(&[]) {
+        match cmd.run(&(), &[]) {
             Ok(CommandStatus::Done) => {}
             Ok(v) => panic!("Wrong variant: {:?}", v),
             Err(e) => panic!("Error: {:?}", e),
@@ -293,11 +296,11 @@ mod tests {
     fn command_auto_with_args() {
         let mut cmd = command! {
             "Example cmd",
-            (:i32, :f32) => |_x, _y| {
+            (:i32, :f32) => |_, _x, _y| {
                 Ok(CommandStatus::Done)
             }
         };
-        match cmd.run(&["13", "1.1"]) {
+        match cmd.run(&(), &["13", "1.1"]) {
             Ok(CommandStatus::Done) => {}
             Ok(v) => panic!("Wrong variant: {:?}", v),
             Err(e) => panic!("Error: {:?}", e),
@@ -308,12 +311,12 @@ mod tests {
     fn command_auto_with_critical() {
         let mut cmd = command! {
             "Example cmd",
-            (:i32, :f32) => |_x, _y| {
+            (:i32, :f32) => |_, _x, _y| {
                 let err = std::io::Error::new(std::io::ErrorKind::InvalidData, "example error");
                 Err(CriticalError::Critical(err.into()).into())
             }
         };
-        match cmd.run(&["13", "1.1"]) {
+        match cmd.run(&(), &["13", "1.1"]) {
             Ok(v) => panic!("Wrong variant: {:?}", v),
             Err(e) => {
                 if e.downcast_ref::<CriticalError>().is_none() {
@@ -325,13 +328,13 @@ mod tests {
 
     #[test]
     fn command_auto_args_info() {
-        let cmd = command!("Example cmd", (:i32, :String, :f32) => |_x, _s, _y| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", (:i32, :String, :f32) => |_: &(), _x, _s, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":String", ":f32"]);
-        let cmd = command!("Example cmd", (:i32, :f32) => |_x, _y| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", (:i32, :f32) => |_: &(), _x, _y| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":i32", ":f32"]);
-        let cmd = command!("Example cmd", (:f32) => |_x| { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", (:f32) => |_: &(), _x| { Ok(CommandStatus::Done) });
         assert_eq!(cmd.args_info, &[":f32"]);
-        let cmd = command!("Example cmd", () => || { Ok(CommandStatus::Done) });
+        let cmd = command!("Example cmd", () => |_: &()| { Ok(CommandStatus::Done) });
         let res: &[&str] = &[];
         assert_eq!(cmd.args_info, res);
     }
@@ -340,7 +343,7 @@ mod tests {
     fn command_auto_args_info_with_names() {
         let cmd = command! {
             "Example cmd",
-            (number:i32, name : String, :f32) => |_x, _s, _y| Ok(CommandStatus::Done)
+            (number:i32, name : String, :f32) => |_: &(), _x, _s, _y| Ok(CommandStatus::Done)
         };
         assert_eq!(cmd.args_info, &["number:i32", "name:String", ":f32"]);
     }

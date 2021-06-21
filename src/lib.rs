@@ -21,14 +21,14 @@
 //! let mut repl = Repl::builder()
 //!     .add("hello", command! {
 //!         "Say hello",
-//!         (name: String) => |name| {
+//!         (name: String) => |_ctx: &(), name| {
 //!             println!("Hello {}!", name);
 //!             Ok(CommandStatus::Done)
 //!         }
 //!     })
 //!     .add("add", command! {
 //!         "Add X to Y",
-//!         (X:i32, Y:i32) => |x, y| {
+//!         (X:i32, Y:i32) => |_ctx: &(), x, y| {
 //!             println!("{} + {} = {}", x, y, x + y);
 //!             Ok(CommandStatus::Done)
 //!         }

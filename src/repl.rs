@@ -25,7 +25,7 @@ pub const RESERVED: &'static [(&'static str, &'static str)] =
 /// [`Repl`] can be used in two ways: one can use the [`Repl::run`] method directly to just
 /// start the evaluation loop, or [`Repl::next`] can be used to get back control between
 /// loop steps.
-pub struct Repl<'a> {
+pub struct Repl<'a, Context: Default = ()> {
     description: String,
     prompt: String,
     text_width: usize,
@@ -34,6 +34,7 @@ pub struct Repl<'a> {
     editor: rustyline::Editor<Completion>,
     out: Box<dyn Write>,
     predict_commands: bool,
+    ctx: Context,
 }
 
 /// State of the REPL after command execution.
@@ -56,7 +57,7 @@ pub enum LoopStatus {
 ///     .build()
 ///     .expect("Failed to build REPL");
 /// ```
-pub struct ReplBuilder<'a> {
+pub struct ReplBuilder<'a, Context: Default = ()> {
     commands: Vec<(String, Command<'a>)>,
     description: String,
     prompt: String,
@@ -67,6 +68,7 @@ pub struct ReplBuilder<'a> {
     with_completion: bool,
     with_filename_completion: bool,
     predict_commands: bool,
+    ctx: Context,
 }
 
 /// Error when building REPL.
@@ -87,7 +89,7 @@ pub(crate) fn split_args(line: &str) -> Result<Vec<String>, shell_words::ParseEr
     shell_words::split(line)
 }
 
-impl<'a> Default for ReplBuilder<'a> {
+impl<'a, Context: Default> Default for ReplBuilder<'a, Context> {
     fn default() -> Self {
         ReplBuilder {
             prompt: "> ".into(),
@@ -103,6 +105,7 @@ impl<'a> Default for ReplBuilder<'a> {
             with_completion: true,
             with_filename_completion: false,
             predict_commands: true,
+            ctx: Default::default(),
         }
     }
 }
@@ -119,7 +122,7 @@ macro_rules! setters {
     };
 }
 
-impl<'a> ReplBuilder<'a> {
+impl<'a, Context: Default> ReplBuilder<'a, Context> {
     setters! {
         /// Repl description shown in [`Repl::help`]. Defaults to an empty string.
         description: String
@@ -166,6 +169,14 @@ impl<'a> ReplBuilder<'a> {
         predict_commands: bool
     }
 
+    /// Set the context for the repl. If not used, the context will be inferred to be
+    /// unit type. This is how the status shared between multiple commands should
+    /// reside.
+    pub fn context(mut self, ctx: Context) -> Self {
+        self.ctx = ctx;
+        self
+    }
+
     /// Add a command with given `name`. Use along with the [`command!`] macro.
     pub fn add(mut self, name: &str, cmd: Command<'a>) -> Self {
         self.commands.push((name.into(), cmd));
@@ -173,7 +184,7 @@ impl<'a> ReplBuilder<'a> {
     }
 
     /// Finalize the configuration and return the REPL or error.
-    pub fn build(self) -> Result<Repl<'a>, BuilderError> {
+    pub fn build(self) -> Result<Repl<'a, Context>, BuilderError> {
         let mut commands = HashMap::new();
         let mut trie = TrieBuilder::new();
         for (name, cmd) in self.commands.into_iter() {
@@ -215,6 +226,7 @@ impl<'a> ReplBuilder<'a> {
             editor,
             out: self.out,
             predict_commands: self.predict_commands,
+            ctx: self.ctx
         })
     }
 }
@@ -367,7 +379,7 @@ Other commands:
             _ => {
                 // find_command must have returned correct name
                 let cmd = self.commands.get_mut(name).unwrap();
-                cmd.run(args)
+                cmd.run(&self.ctx, args)
             }
         }
     }
@@ -387,8 +399,8 @@ mod tests {
     #[test]
     fn builder_duplicate() {
         let result = Repl::builder()
-            .add("name_x", command!("", () => || Ok(CommandStatus::Done)))
-            .add("name_x", command!("", () => || Ok(CommandStatus::Done)))
+            .add("name_x", command!("", () => |_: &()| Ok(CommandStatus::Done)))
+            .add("name_x", command!("", () => |_: &()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::DuplicateCommands(_))));
     }
@@ -396,7 +408,7 @@ mod tests {
     #[test]
     fn builder_empty() {
         let result = Repl::builder()
-            .add("", command!("", () => || Ok(CommandStatus::Done)))
+            .add("", command!("", () => |_: &()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::InvalidName(_))));
     }
@@ -406,7 +418,7 @@ mod tests {
         let result = Repl::builder()
             .add(
                 "name-with spaces",
-                command!("", () => || Ok(CommandStatus::Done)),
+                command!("", () => |_: &()| Ok(CommandStatus::Done)),
             )
             .build();
         assert!(matches!(result, Err(BuilderError::InvalidName(_))));
@@ -415,11 +427,11 @@ mod tests {
     #[test]
     fn builder_reserved() {
         let result = Repl::builder()
-            .add("help", command!("", () => || Ok(CommandStatus::Done)))
+            .add("help", command!("", () => |_| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
         let result = Repl::builder()
-            .add("quit", command!("", () => || Ok(CommandStatus::Done)))
+            .add("quit", command!("", () => |_| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
     }
@@ -429,7 +441,7 @@ mod tests {
         let mut repl = Repl::builder()
             .add(
                 "foo",
-                command!("description", () => || Ok(CommandStatus::Done)),
+                command!("description", () => |_| Ok(CommandStatus::Done)),
             )
             .build()
             .unwrap();
@@ -437,7 +449,7 @@ mod tests {
         let mut repl = Repl::builder()
             .add(
                 "foo",
-                command!("description", () => || Ok(CommandStatus::Quit)),
+                command!("description", () => |_| Ok(CommandStatus::Quit)),
             )
             .build()
             .unwrap();

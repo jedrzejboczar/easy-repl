@@ -5,14 +5,14 @@ fn main() -> anyhow::Result<()> {
     let mut repl = Repl::builder()
         .add("hello", command! {
             "Say hello",
-            (name: String) => |name| {
+            (name: String) => |_: &(), name| {
                 println!("Hello {}!", name);
                 Ok(CommandStatus::Done)
             }
         })
         .add("add", command! {
             "Add X to Y",
-            (X:i32, Y:i32) => |x, y| {
+            (X:i32, Y:i32) => |_: &(), x, y| {
                 println!("{} + {} = {}", x, y, x + y);
                 Ok(CommandStatus::Done)
             }
