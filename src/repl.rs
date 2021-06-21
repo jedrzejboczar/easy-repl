@@ -29,7 +29,7 @@ pub struct Repl<'a, Context: Default = ()> {
     description: String,
     prompt: String,
     text_width: usize,
-    commands: HashMap<String, Command<'a>>,
+    commands: HashMap<String, Command<'a, Context>>,
     trie: Rc<Trie<u8>>,
     editor: rustyline::Editor<Completion>,
     out: Box<dyn Write>,
@@ -51,14 +51,14 @@ pub enum LoopStatus {
 /// All setter methods take owned `self` so the calls can be chained, for example:
 /// ```rust
 /// # use easy_repl::Repl;
-/// let repl = Repl::builder()
+/// let repl = Repl::<()>::builder()
 ///     .description("My REPL")
 ///     .prompt("repl> ")
 ///     .build()
 ///     .expect("Failed to build REPL");
 /// ```
 pub struct ReplBuilder<'a, Context: Default = ()> {
-    commands: Vec<(String, Command<'a>)>,
+    commands: Vec<(String, Command<'a, Context>)>,
     description: String,
     prompt: String,
     text_width: usize,
@@ -178,7 +178,7 @@ impl<'a, Context: Default> ReplBuilder<'a, Context> {
     }
 
     /// Add a command with given `name`. Use along with the [`command!`] macro.
-    pub fn add(mut self, name: &str, cmd: Command<'a>) -> Self {
+    pub fn add(mut self, name: &str, cmd: Command<'a, Context>) -> Self {
         self.commands.push((name.into(), cmd));
         self
     }
@@ -231,9 +231,9 @@ impl<'a, Context: Default> ReplBuilder<'a, Context> {
     }
 }
 
-impl<'a> Repl<'a> {
+impl<'a, Context: Default> Repl<'a, Context> {
     /// Start [`ReplBuilder`] with default values.
-    pub fn builder() -> ReplBuilder<'a> {
+    pub fn builder() -> ReplBuilder<'a, Context> {
         ReplBuilder::default()
     }
 
@@ -427,11 +427,11 @@ mod tests {
     #[test]
     fn builder_reserved() {
         let result = Repl::builder()
-            .add("help", command!("", () => |_| Ok(CommandStatus::Done)))
+            .add("help", command!("", () => |_: &()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
         let result = Repl::builder()
-            .add("quit", command!("", () => |_| Ok(CommandStatus::Done)))
+            .add("quit", command!("", () => |_: &()| Ok(CommandStatus::Done)))
             .build();
         assert!(matches!(result, Err(BuilderError::ReservedName(_))));
     }
@@ -441,7 +441,7 @@ mod tests {
         let mut repl = Repl::builder()
             .add(
                 "foo",
-                command!("description", () => |_| Ok(CommandStatus::Done)),
+                command!("description", () => |_: &()| Ok(CommandStatus::Done)),
             )
             .build()
             .unwrap();
@@ -449,7 +449,7 @@ mod tests {
         let mut repl = Repl::builder()
             .add(
                 "foo",
-                command!("description", () => |_| Ok(CommandStatus::Quit)),
+                command!("description", () => |_: &()| Ok(CommandStatus::Quit)),
             )
             .build()
             .unwrap();
