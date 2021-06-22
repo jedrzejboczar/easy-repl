@@ -29,7 +29,7 @@ pub struct Repl<'a, Context: Default = ()> {
     description: String,
     prompt: String,
     text_width: usize,
-    commands: HashMap<String, Command<'a, Context>>,
+    commands: HashMap<String, Vec<Command<'a, Context>>>,
     trie: Rc<Trie<u8>>,
     editor: rustyline::Editor<Completion>,
     out: Box<dyn Write>,
@@ -185,18 +185,19 @@ impl<'a, Context: Default> ReplBuilder<'a, Context> {
 
     /// Finalize the configuration and return the REPL or error.
     pub fn build(self) -> Result<Repl<'a, Context>, BuilderError> {
-        let mut commands = HashMap::new();
+        let mut commands: HashMap<String, Vec<_>> = HashMap::new();
         let mut trie = TrieBuilder::new();
         for (name, cmd) in self.commands.into_iter() {
-            let old = commands.insert(name.clone(), cmd);
+            let cmds = commands.entry(name.clone()).or_default();
             let args = split_args(&name).map_err(|_e| BuilderError::InvalidName(name.clone()))?;
             if args.len() != 1 || name.is_empty() {
                 return Err(BuilderError::InvalidName(name));
             } else if RESERVED.iter().find(|&&(n, _)| n == name).is_some() {
                 return Err(BuilderError::ReservedName(name));
-            } else if old.is_some() {
+            } else if cmds.iter().find(|c| **c == cmd).is_some() {
                 return Err(BuilderError::DuplicateCommands(name));
             }
+            cmds.push(cmd);
             trie.push(name);
         }
         for (name, _) in RESERVED.iter() {
@@ -270,15 +271,14 @@ impl<'a, Context: Default> Repl<'a, Context> {
         names.sort();
 
         let signature =
-            |name: &String| format!("{} {}", name, self.commands[name].args_info.join(" "));
-        let user: Vec<_> = names
+            |name: &String, args_info: &Vec<String>| format!("{} {}", name, args_info.join(" "));
+        let user: Vec<_> = self.commands 
             .iter()
-            .map(|name| {
-                (
-                    signature(name),
-                    self.commands[name.as_str()].description.clone(),
-                )
+            .map(|(name, cmds)| {
+                cmds.iter()
+                    .map(move |cmd| (signature(&name, &cmd.args_info), cmd.description.clone()))
             })
+            .flatten()
             .collect();
 
         let other: Vec<_> = RESERVED
@@ -331,12 +331,15 @@ Other commands:
                 Ok(CommandStatus::Quit) => Ok(LoopStatus::Break),
                 Err(err) if err.downcast_ref::<CriticalError>().is_some() => Err(err),
                 Err(err) => {
-                    // other errors are handler here
+                    // other errors are handled here
                     writeln!(&mut self.out, "Error: {}", err)?;
-                    if err.downcast_ref::<ArgsError>().is_some() {
+                    if err.is::<ArgsError>() {
                         // in case of ArgsError we know it could not have been a reserved command
-                        let cmd = self.commands.get_mut(name).unwrap();
-                        writeln!(&mut self.out, "Usage: {} {}", name, cmd.args_info.join(" "))?;
+                        let cmds = self.commands.get_mut(name).unwrap();
+                        println!("Usage:");
+                        for cmd in cmds.iter() {
+                            writeln!(&mut self.out, "{} {}", name, cmd.args_info.join(" "))?;
+                        }
                     }
                     Ok(LoopStatus::Continue)
                 }
@@ -378,8 +381,24 @@ Other commands:
             "quit" => Ok(CommandStatus::Quit),
             _ => {
                 // find_command must have returned correct name
-                let cmd = self.commands.get_mut(name).unwrap();
-                cmd.run(&self.ctx, args)
+                let mut last_arg_err = None;
+                let cmds = self.commands.get_mut(name).unwrap();
+                for cmd in cmds.iter_mut() {
+                    let run_res = cmd.run(&self.ctx, args);
+                    match run_res {
+                        Err(e) => {
+                            if !e.is::<ArgsError>() {
+                                return Err(e);
+                            } else {
+                                last_arg_err = Some(Err(e));
+                            }
+                        },
+                        res => {
+                            return res;
+                        }
+                    }
+                }
+                last_arg_err.unwrap()
             }
         }
     }
