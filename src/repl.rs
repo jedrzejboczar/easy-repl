@@ -245,12 +245,11 @@ impl<'a> Repl<'a> {
                 let line = format!("  {:width$}  {}", sig, desc, width = width);
                 textwrap::fill(&line, &opts)
             })
-            .reduce(|mut out, next| {
+            .fold(String::new(), |mut out, next| {
                 out.push_str("\n");
                 out.push_str(&next);
                 out
             })
-            .unwrap()
     }
 
     /// Returns formatted help message.
