@@ -183,7 +183,7 @@ impl<'a> ReplBuilder<'a> {
                 return Err(BuilderError::InvalidName(name));
             } else if RESERVED.iter().any(|(n, _)| *n == name) {
                 return Err(BuilderError::ReservedName(name));
-            } else if cmds.iter().any(|c| *c == cmd) {
+            } else if cmds.iter().any(|c| c.arg_types() == cmd.arg_types()) {
                 return Err(BuilderError::DuplicateCommands(name));
             }
             cmds.push(cmd);
@@ -325,7 +325,7 @@ Other commands:
                         let cmds = self.commands.get_mut(name).unwrap();
                         writeln!(&mut self.out, "Usage:")?;
                         for cmd in cmds.iter() {
-                            writeln!(&mut self.out, "{} {}", name, cmd.args_info.join(" "))?;
+                            writeln!(&mut self.out, "  {} {}", name, cmd.args_info.join(" "))?;
                         }
                     }
                     Ok(LoopStatus::Continue)

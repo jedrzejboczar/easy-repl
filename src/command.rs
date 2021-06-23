@@ -27,31 +27,6 @@ pub struct Command<'a> {
     pub handler: Box<Handler<'a>>,
 }
 
-/// Command equals when types equal
-impl<'a> std::cmp::PartialEq for Command<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        if self.args_info.len() != other.args_info.len() {
-            return false;
-        }
-
-        for i in 0..self.args_info.len() {
-            let my_arg = &self.args_info[i];
-            let other_arg = &other.args_info[i];
-
-            let my_type_str = my_arg.split(":").collect::<Vec<_>>()[1];
-            let other_type_str = other_arg.split(":").collect::<Vec<_>>()[1];
-
-            if my_type_str != other_type_str {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-
-impl<'a> std::cmp::Eq for Command<'a> {}
-
 /// Return status of a command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CommandStatus {
@@ -120,6 +95,14 @@ impl<'a> Command<'a> {
     /// Validate the arguments and invoke the handler if arguments are correct.
     pub fn run(&mut self, args: &[&str]) -> anyhow::Result<CommandStatus> {
         (self.handler)(args)
+    }
+
+    /// Returns the string description of the argument types
+    pub fn arg_types(&self) -> Vec<&str> {
+        self.args_info
+            .iter()
+            .map(|info| info.split(":").collect::<Vec<_>>()[1])
+            .collect()
     }
 }
 
