@@ -96,6 +96,14 @@ impl<'a> Command<'a> {
     pub fn run(&mut self, args: &[&str]) -> anyhow::Result<CommandStatus> {
         (self.handler)(args)
     }
+
+    /// Returns the string description of the argument types
+    pub fn arg_types(&self) -> Vec<&str> {
+        self.args_info
+            .iter()
+            .map(|info| info.split(":").collect::<Vec<_>>()[1])
+            .collect()
+    }
 }
 
 impl<'a> std::fmt::Debug for Command<'a> {
