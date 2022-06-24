@@ -214,7 +214,7 @@ macro_rules! command {
         }
     };
     (@handler $($type:ty)*, $handler:expr) => {
-        Box::new( move |#[allow(unused_variables)] args| -> anyhow::Result<CommandStatus> {
+        Box::new( move |#[allow(unused_variables)] args| -> $crate::anyhow::Result<CommandStatus> {
             let validator = $crate::validator!($($type),*);
             validator(args)?;
             #[allow(unused_mut)]
