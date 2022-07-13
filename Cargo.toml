@@ -16,10 +16,10 @@ keywords = [
 categories = ["command-line-interface"]
 
 [dependencies]
-rustyline = "8.0"
-rustyline-derive = "0.4"
+rustyline = "9.0"
+rustyline-derive = "0.6"
 thiserror = "1.0"
 anyhow = "1.0"
-textwrap = "0.13"
+textwrap = "0.15"
 trie-rs = "0.1"
 shell-words = "1.0"
