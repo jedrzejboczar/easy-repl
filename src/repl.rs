@@ -260,10 +260,12 @@ impl<'a> Repl<'a> {
 
         let signature =
             |name: &String, args_info: &Vec<String>| format!("{} {}", name, args_info.join(" "));
-        let user: Vec<_> = self.commands
+        let user: Vec<_> = self
+            .commands
             .iter()
             .map(|(name, cmds)| {
-                cmds.iter().map(move |cmd| (signature(&name, &cmd.args_info), cmd.description.clone()))
+                cmds.iter()
+                    .map(move |cmd| (signature(&name, &cmd.args_info), cmd.description.clone()))
             })
             .flatten()
             .collect();
@@ -381,7 +383,7 @@ Other commands:
                             } else {
                                 last_arg_err = Some(Err(e));
                             }
-                        },
+                        }
                         other => return other,
                     }
                 }
@@ -414,6 +416,7 @@ mod tests {
 
     #[test]
     fn builder_non_duplicate() {
+        #[rustfmt::skip]
         let result = Repl::builder()
             .add("name_x", command!("", (a: String) => |_| Ok(CommandStatus::Done)))
             .add("name_x", command!("", (b: i32) => |_| Ok(CommandStatus::Done)))

@@ -1,10 +1,11 @@
-use easy_repl::{Repl, CommandStatus, command, validator};
 use anyhow::{self, Context};
+use easy_repl::{command, validator, CommandStatus, Repl};
 
 fn main() -> anyhow::Result<()> {
     let mut outside_x = String::from("Out x");
     let mut outside_y = String::from("Out y");
 
+    #[rustfmt::skip]
     let mut repl = Repl::builder()
         .description("Example REPL")
         .prompt("=> ")

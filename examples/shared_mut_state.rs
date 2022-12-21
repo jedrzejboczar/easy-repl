@@ -1,6 +1,6 @@
-use std::{cell::RefCell};
-use easy_repl::{Repl, CommandStatus, command};
 use anyhow::{self, Context};
+use easy_repl::{command, CommandStatus, Repl};
+use std::cell::RefCell;
 
 fn main() -> anyhow::Result<()> {
     // To use a value in multiple commands we need shared ownership
@@ -11,6 +11,7 @@ fn main() -> anyhow::Result<()> {
     let ref1 = &counter;
     let ref2 = &counter;
 
+    #[rustfmt::skip]
     let mut repl = Repl::builder()
         .add("inc", command! {
             "Increment counter",
@@ -28,7 +29,8 @@ fn main() -> anyhow::Result<()> {
                 Ok(CommandStatus::Done)
             },
         })
-        .build().context("Failed to create repl")?;
+        .build()
+        .context("Failed to create repl")?;
 
     repl.run().context("Critical REPL error")?;
 

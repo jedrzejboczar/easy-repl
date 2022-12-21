@@ -1,10 +1,11 @@
-use std::path::PathBuf;
 use std::net::IpAddr;
+use std::path::PathBuf;
 
-use easy_repl::{Repl, CommandStatus, command};
 use anyhow::{self, Context};
+use easy_repl::{command, CommandStatus, Repl};
 
 fn main() -> anyhow::Result<()> {
+    #[rustfmt::skip]
     let mut repl = Repl::builder()
         .add("ls", command! {
             "List files in a directory",
@@ -22,8 +23,8 @@ fn main() -> anyhow::Result<()> {
                 Ok(CommandStatus::Done)
             }
         })
-        .build().context("Failed to create repl")?;
+        .build()
+        .context("Failed to create repl")?;
 
     repl.run().context("Critical REPL error")
 }
-

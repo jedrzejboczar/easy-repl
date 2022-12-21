@@ -1,7 +1,7 @@
 use std::time::Instant;
 
-use easy_repl::{Repl, CommandStatus, Critical, command};
 use anyhow::{self, Context};
+use easy_repl::{command, CommandStatus, Critical, Repl};
 
 // this could be any funcion returining Result with an error implementing Error
 // here for simplicity we make use of the Other variant of std::io::Error
@@ -12,6 +12,7 @@ fn may_throw(description: String) -> Result<(), std::io::Error> {
 fn main() -> anyhow::Result<()> {
     let start = Instant::now();
 
+    #[rustfmt::skip]
     let mut repl = Repl::builder()
         .add("ok", command! {
             "Run a command that just succeeds",
@@ -53,10 +54,10 @@ fn main() -> anyhow::Result<()> {
                 Ok(CommandStatus::Done)
             },
         })
-        .build().context("Failed to create repl")?;
+        .build()
+        .context("Failed to create repl")?;
 
     repl.run().context("Critical REPL error")?;
 
     Ok(())
 }
-
