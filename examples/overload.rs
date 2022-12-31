@@ -1,7 +1,8 @@
-use easy_repl::{Repl, CommandStatus, command};
 use anyhow::{self, Context};
+use easy_repl::{command, CommandStatus, Repl};
 
 fn main() -> anyhow::Result<()> {
+    #[rustfmt::skip]
     let mut repl = Repl::builder()
         .add("describe", command! {
             "Variant 1",
@@ -24,7 +25,8 @@ fn main() -> anyhow::Result<()> {
                 Ok(CommandStatus::Done)
             }
         })
-        .build().context("Failed to create repl")?;
+        .build()
+        .context("Failed to create repl")?;
 
     repl.run().context("Critical REPL error")?;
 

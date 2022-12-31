@@ -17,7 +17,7 @@ pub type Handler<'a> = dyn 'a + FnMut(&[&str]) -> anyhow::Result<CommandStatus>;
 ///
 /// Though it is possible to construct it by manually, it is not advised.
 /// One should rather use the provided [`command!`] macro which will generate
-/// appropriate arguments validation and args_info based on passed specification.
+/// appropriate arguments validation and `args_info` based on passed specification.
 pub struct Command<'a> {
     /// Command desctiption that will be displayed in the help message
     pub description: String,
@@ -101,7 +101,7 @@ impl<'a> Command<'a> {
     pub fn arg_types(&self) -> Vec<&str> {
         self.args_info
             .iter()
-            .map(|info| info.split(":").collect::<Vec<_>>()[1])
+            .map(|info| info.split(':').collect::<Vec<_>>()[1])
             .collect()
     }
 }

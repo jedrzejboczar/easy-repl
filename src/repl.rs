@@ -12,8 +12,7 @@ use crate::command::{ArgsError, Command, CommandStatus, CriticalError};
 use crate::completion::{completion_candidates, Completion};
 
 /// Reserved command names. These commands are always added to REPL.
-pub const RESERVED: &'static [(&'static str, &'static str)] =
-    &[("help", "Show this help message"), ("quit", "Quit repl")];
+pub const RESERVED: &[(&str, &str)] = &[("help", "Show this help message"), ("quit", "Quit repl")];
 
 /// Read-eval-print loop.
 ///
@@ -176,7 +175,7 @@ impl<'a> ReplBuilder<'a> {
     pub fn build(self) -> Result<Repl<'a>, BuilderError> {
         let mut commands: HashMap<String, Vec<Command<'a>>> = HashMap::new();
         let mut trie = TrieBuilder::new();
-        for (name, cmd) in self.commands.into_iter() {
+        for (name, cmd) in self.commands {
             let cmds = commands.entry(name.clone()).or_default();
             let args = split_args(&name).map_err(|_e| BuilderError::InvalidName(name.clone()))?;
             if args.len() != 1 || name.is_empty() {
@@ -228,7 +227,7 @@ impl<'a> Repl<'a> {
 
     fn format_help_entries(&self, entries: &[(String, String)]) -> String {
         if entries.is_empty() {
-            return "".into();
+            return String::new();
         }
         let width = entries
             .iter()
@@ -243,11 +242,11 @@ impl<'a> Repl<'a> {
                 let opts = textwrap::Options::new(self.text_width)
                     .initial_indent("")
                     .subsequent_indent(&indent);
-                let line = format!("  {:width$}  {}", sig, desc, width = width);
-                textwrap::fill(&line, &opts)
+                let line = format!("  {sig:width$}  {desc}");
+                textwrap::fill(&line, opts)
             })
             .fold(String::new(), |mut out, next| {
-                out.push_str("\n");
+                out.push('\n');
                 out.push_str(&next);
                 out
             })
@@ -260,17 +259,18 @@ impl<'a> Repl<'a> {
 
         let signature =
             |name: &String, args_info: &Vec<String>| format!("{} {}", name, args_info.join(" "));
-        let user: Vec<_> = self.commands
+        let user: Vec<_> = self
+            .commands
             .iter()
-            .map(|(name, cmds)| {
-                cmds.iter().map(move |cmd| (signature(&name, &cmd.args_info), cmd.description.clone()))
+            .flat_map(|(name, cmds)| {
+                cmds.iter()
+                    .map(move |cmd| (signature(name, &cmd.args_info), cmd.description.clone()))
             })
-            .flatten()
             .collect();
 
         let other: Vec<_> = RESERVED
             .iter()
-            .map(|(name, desc)| (name.to_string(), desc.to_string()))
+            .map(|(name, desc)| ((*name).to_string(), desc.to_string()))
             .collect();
 
         let msg = format!(
@@ -290,11 +290,11 @@ Other commands:
         msg.trim().into()
     }
 
-    fn handle_line(&mut self, line: String) -> anyhow::Result<LoopStatus> {
+    fn handle_line(&mut self, line: &str) -> anyhow::Result<LoopStatus> {
         // if there is any parsing error just continue to next input
-        let args = match split_args(&line) {
+        let args = match split_args(line) {
             Err(err) => {
-                writeln!(&mut self.out, "Error: {}", err)?;
+                writeln!(&mut self.out, "Error: {err}")?;
                 return Ok(LoopStatus::Continue);
             }
             Ok(args) => args,
@@ -303,7 +303,7 @@ Other commands:
         let mut candidates = completion_candidates(&self.trie, prefix);
         let exact = candidates.len() == 1 && &candidates[0] == prefix;
         if candidates.len() != 1 || (!self.predict_commands && !exact) {
-            writeln!(&mut self.out, "Command not found: {}", prefix)?;
+            writeln!(&mut self.out, "Command not found: {prefix}")?;
             if candidates.len() > 1 || (!self.predict_commands && !exact) {
                 candidates.sort();
                 writeln!(&mut self.out, "Candidates:\n  {}", candidates.join("\n  "))?;
@@ -312,14 +312,14 @@ Other commands:
             Ok(LoopStatus::Continue)
         } else {
             let name = &candidates[0];
-            let tail: Vec<_> = args[1..].iter().map(|s| s.as_str()).collect();
+            let tail: Vec<_> = args[1..].iter().map(String::as_str).collect();
             match self.handle_command(name, &tail) {
                 Ok(CommandStatus::Done) => Ok(LoopStatus::Continue),
                 Ok(CommandStatus::Quit) => Ok(LoopStatus::Break),
                 Err(err) if err.downcast_ref::<CriticalError>().is_some() => Err(err),
                 Err(err) => {
                     // other errors are handled here
-                    writeln!(&mut self.out, "Error: {}", err)?;
+                    writeln!(&mut self.out, "Error: {err}")?;
                     if err.is::<ArgsError>() {
                         // in case of ArgsError we know it could not have been a reserved command
                         let cmds = self.commands.get_mut(name).unwrap();
@@ -340,7 +340,7 @@ Other commands:
             Ok(line) => {
                 if !line.trim().is_empty() {
                     self.editor.add_history_entry(line.trim());
-                    self.handle_line(line)
+                    self.handle_line(&line)
                 } else {
                     Ok(LoopStatus::Continue)
                 }
@@ -352,7 +352,7 @@ Other commands:
             Err(ReadlineError::Eof) => Ok(LoopStatus::Break),
             // TODO: not sure if these should be propagated or handler here
             Err(err) => {
-                writeln!(&mut self.out, "Error: {:?}", err)?;
+                writeln!(&mut self.out, "Error: {err:?}")?;
                 Ok(LoopStatus::Continue)
             }
         }
@@ -362,7 +362,7 @@ Other commands:
         match name {
             "help" => {
                 let help = self.help();
-                writeln!(&mut self.out, "{}", help)?;
+                writeln!(&mut self.out, "{help}")?;
                 Ok(CommandStatus::Done)
             }
             "quit" => Ok(CommandStatus::Quit),
@@ -381,7 +381,7 @@ Other commands:
                             } else {
                                 last_arg_err = Some(Err(e));
                             }
-                        },
+                        }
                         other => return other,
                     }
                 }
@@ -393,7 +393,7 @@ Other commands:
 
     /// Run the evaluation loop until [`LoopStatus::Break`] is received.
     pub fn run(&mut self) -> anyhow::Result<()> {
-        while let LoopStatus::Continue = self.next()? {}
+        while self.next()? == LoopStatus::Continue {}
         Ok(())
     }
 }
@@ -414,6 +414,7 @@ mod tests {
 
     #[test]
     fn builder_non_duplicate() {
+        #[rustfmt::skip]
         let result = Repl::builder()
             .add("name_x", command!("", (a: String) => |_| Ok(CommandStatus::Done)))
             .add("name_x", command!("", (b: i32) => |_| Ok(CommandStatus::Done)))
