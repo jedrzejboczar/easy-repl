@@ -301,8 +301,9 @@ Other commands:
         };
         let prefix = &args[0];
         let mut candidates = completion_candidates(&self.trie, prefix);
-        let exact = candidates.len() == 1 && &candidates[0] == prefix;
-        if candidates.len() != 1 || (!self.predict_commands && !exact) {
+        let exact = !candidates.is_empty() && &candidates[0] == prefix;
+        let can_take_first = !candidates.is_empty() && (exact || self.predict_commands);
+        if !can_take_first {
             writeln!(&mut self.out, "Command not found: {prefix}")?;
             if candidates.len() > 1 || (!self.predict_commands && !exact) {
                 candidates.sort();
