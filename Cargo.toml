@@ -1,11 +1,11 @@
 [package]
 name = "easy-repl"
-version = "0.2.1"
-authors = ["Jędrzej Boczar <jedrzej.boczar@gmail.com>"]
+version = "0.2.1-patched"
+authors = ["Jędrzej Boczar <jedrzej.boczar@gmail.com>","jgabaut"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 description = "An easy to use REPL, ideal when there is a need to crate an ad-hoc shell"
-repository = "https://github.com/jedrzejboczar/easy-repl"
+repository = "https://github.com/jgabaut/easy-repl"
 keywords = [
     "repl",
     "cli",

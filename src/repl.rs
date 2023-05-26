@@ -1,4 +1,5 @@
 //! Main REPL logic.
+const EASY-REPL_VERS: &'static str = "0.2.1-patched";
 
 use std::{collections::HashMap, io::Write, rc::Rc};
 
@@ -12,7 +13,7 @@ use crate::command::{ArgsError, Command, CommandStatus, CriticalError};
 use crate::completion::{completion_candidates, Completion};
 
 /// Reserved command names. These commands are always added to REPL.
-pub const RESERVED: &[(&str, &str)] = &[("help", "Show this help message"), ("quit", "Quit repl")];
+pub const RESERVED: &[(&str, &str, &str)] = &[("version","Show easy-repl version"),("help", "Show this help message"), ("quit", "Quit repl")];
 
 /// Read-eval-print loop.
 ///
@@ -98,7 +99,8 @@ impl<'a> Default for ReplBuilder<'a> {
                 .output_stream(rustyline::OutputStreamType::Stderr) // NOTE: cannot specify `out`
                 .completion_type(rustyline::CompletionType::List)
                 .build(),
-            with_hints: true,
+            //Disable hints by default
+            with_hints: false,
             with_completion: true,
             with_filename_completion: false,
             predict_commands: true,
@@ -198,6 +200,7 @@ impl<'a> ReplBuilder<'a> {
             with_hints: self.with_hints,
             with_completion: self.with_completion,
             filename_completer: if self.with_filename_completion {
+		//TODO: look into how this can fail
                 Some(FilenameCompleter::new())
             } else {
                 None
@@ -361,6 +364,11 @@ Other commands:
 
     fn handle_command(&mut self, name: &str, args: &[&str]) -> anyhow::Result<CommandStatus> {
         match name {
+            "version" => {
+		let curr_Version = EASY-REPL_VERS;
+                writeln!(&mut self.out, format!("v{}",curr_Version))?;
+                Ok(CommandStatus::Done)
+            }
             "help" => {
                 let help = self.help();
                 writeln!(&mut self.out, "{help}")?;

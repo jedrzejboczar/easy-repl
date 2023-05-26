@@ -81,9 +81,9 @@ where
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum ArgsError {
-    #[error("wrong number of arguments: got {got}, expected {expected}")]
+    #[error("Wrong number of arguments: got {got}, expected {expected}")]
     WrongNumberOfArguments { got: usize, expected: usize },
-    #[error("failed to parse argument value '{argument}': {error}")]
+    #[error("Failed to parse argument value '{argument}': {error}")]
     WrongArgumentValue {
         argument: String,
         #[source]
